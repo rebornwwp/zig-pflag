@@ -49,7 +49,11 @@ pub fn main(init: std.process.Init) !void {
     try fs.boolVar(&secret, "secret", false, "hidden flag");
     try fs.markHidden("secret");
 
-    fs.setNormalizeFunc(struct { fn f(_: *pflag.FlagSet, n: []const u8) []const u8 { return n; } }.f);
+    fs.setNormalizeFunc(struct {
+        fn f(_: *pflag.FlagSet, n: []const u8) []const u8 {
+            return n;
+        }
+    }.f);
     try fs.setAnnotation("name", "category", &.{"basic"});
 
     h("Flag defaults (before parsing)");
@@ -76,16 +80,30 @@ pub fn main(init: std.process.Init) !void {
     show("  timeout  ", timeout);
 
     h("Slice values");
-    if (tags.items.len > 0) { for (tags.items) |t| p("  tag = {s}", .{t}); } else w("  (none)");
-    if (ports.items.len > 0) { for (ports.items) |p2| p("  expose = {d}", .{p2}); } else w("  (none)");
-    if (scores.items.len > 0) { for (scores.items) |s| p("  score = {d}", .{s}); } else w("  (none)");
+    if (tags.items.len > 0) {
+        for (tags.items) |t| p("  tag = {s}", .{t});
+    } else w("  (none)");
+    if (ports.items.len > 0) {
+        for (ports.items) |p2| p("  expose = {d}", .{p2});
+    } else w("  (none)");
+    if (scores.items.len > 0) {
+        for (scores.items) |s| p("  score = {d}", .{s});
+    } else w("  (none)");
 
     h("Map values");
-    if (headers.count() > 0) { var it = headers.iterator(); while (it.next()) |e| p("  {s} = {d}", .{ e.key_ptr.*, e.value_ptr.* }); } else w("  (none)");
-    if (labels.count() > 0) { var it = labels.iterator(); while (it.next()) |e| p("  {s} = {s}", .{ e.key_ptr.*, e.value_ptr.* }); } else w("  (none)");
+    if (headers.count() > 0) {
+        var it = headers.iterator();
+        while (it.next()) |e| p("  {s} = {d}", .{ e.key_ptr.*, e.value_ptr.* });
+    } else w("  (none)");
+    if (labels.count() > 0) {
+        var it = labels.iterator();
+        while (it.next()) |e| p("  {s} = {s}", .{ e.key_ptr.*, e.value_ptr.* });
+    } else w("  (none)");
 
     h("Positional args");
-    if (fs.argList().len > 0) { for (fs.argList()) |a| p("  {s}", .{a}); } else w("  (none)");
+    if (fs.argList().len > 0) {
+        for (fs.argList()) |a| p("  {s}", .{a});
+    } else w("  (none)");
 
     h("Flags that were set");
     var ctx = VisitCtx{ .fs = &fs };
@@ -103,15 +121,28 @@ pub fn main(init: std.process.Init) !void {
 }
 
 const VisitCtx = struct { fs: *pflag.FlagSet };
-fn visitCb(_: *VisitCtx, f: *pflag.Flag) void { p("  --{s} (changed={})", .{ f.name, f.changed }); }
+fn visitCb(_: *VisitCtx, f: *pflag.Flag) void {
+    p("  --{s} (changed={})", .{ f.name, f.changed });
+}
 
-fn w(s: []const u8) void { _ = std.os.linux.write(1, s.ptr, s.len); }
-fn h(s: []const u8) void { w("\n"); w(s); w("\n"); }
-fn show(name: []const u8, v: anytype) void { p("{s}= {}", .{ name, v }); }
+fn w(s: []const u8) void {
+    _ = std.os.linux.write(1, s.ptr, s.len);
+}
+fn h(s: []const u8) void {
+    w("\n");
+    w(s);
+    w("\n");
+}
+fn show(name: []const u8, v: anytype) void {
+    p("{s}= {}", .{ name, v });
+}
 fn p(comptime fmt: []const u8, args: anytype) void {
     var b: [256]u8 = undefined;
     const m = std.fmt.bufPrint(&b, fmt, args) catch return;
     w(m);
     w("\n");
 }
-fn pbuf(w_: *std.Io.Writer) void { w(std.Io.Writer.buffered(w_)); w_.end = 0; }
+fn pbuf(w_: *std.Io.Writer) void {
+    w(std.Io.Writer.buffered(w_));
+    w_.end = 0;
+}
