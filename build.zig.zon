@@ -1,0 +1,10 @@
+.{
+    .name = .pflag,
+    .fingerprint = 0xcf402354121e77bf,
+    .version = "0.1.0",
+    .minimum_zig_version = "0.16.0",
+    .paths = .{
+        "build.zig",
+        "src",
+    },
+}
