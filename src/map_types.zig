@@ -39,6 +39,13 @@ const strToIntVtable = Value.VTable{
             return "stringToInt";
         }
     }.tn,
+    .deinit = struct {
+        fn di(ptr: *anyopaque, gpa: std.mem.Allocator) void {
+            // HashMap owned by caller — no cleanup here.
+            _ = ptr;
+            _ = gpa;
+        }
+    }.di,
 };
 
 pub fn stringToIntValue(p: *std.StringHashMapUnmanaged(i32)) Value {
@@ -70,7 +77,7 @@ const strToStrVtable = Value.VTable{
                 buf.appendSlice(gpa, "=") catch break;
                 buf.appendSlice(gpa, entry.value_ptr.*) catch break;
             }
-            return buf.toOwnedSlice(gpa) catch return "[]";
+            return buf.toOwnedSlice(gpa) catch return "{}";
         }
     }.string,
     .typeName = struct {
@@ -78,6 +85,12 @@ const strToStrVtable = Value.VTable{
             return "stringToString";
         }
     }.tn,
+    .deinit = struct {
+        fn di(ptr: *anyopaque, gpa: std.mem.Allocator) void {
+            _ = ptr;
+            _ = gpa;
+        }
+    }.di,
 };
 
 pub fn stringToStringValue(p: *std.StringHashMapUnmanaged([]const u8)) Value {

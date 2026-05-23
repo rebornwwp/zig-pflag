@@ -12,6 +12,12 @@ const durationVtable = Value.VTable{
             return "duration";
         }
     }.tn,
+    .deinit = struct {
+        fn di(ptr: *anyopaque, gpa: std.mem.Allocator) void {
+            _ = ptr;
+            _ = gpa;
+        }
+    }.di,
 };
 fn durationSetFn(ptr: *anyopaque, v: []const u8) !void {
     const p: *i64 = @ptrCast(@alignCast(ptr));

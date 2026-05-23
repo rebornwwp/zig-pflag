@@ -12,6 +12,12 @@ const stringVtable = Value.VTable{
             return "string";
         }
     }.tn,
+    .deinit = struct {
+        fn di(ptr: *anyopaque, gpa: std.mem.Allocator) void {
+            _ = ptr;
+            _ = gpa;
+        }
+    }.di,
 };
 fn stringSetFn(ptr: *anyopaque, v: []const u8) !void {
     (@as(*[]const u8, @ptrCast(@alignCast(ptr)))).* = v;

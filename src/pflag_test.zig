@@ -636,7 +636,9 @@ test "StringSlice with default values" {
     var fs = newTestFlagSet();
     defer fs.deinit();
     var slice: std.ArrayListUnmanaged([]const u8) = .empty;
-    try fs.stringSliceVar(&slice, "tag", &.{ "alpha", "beta" }, "");
+    defer slice.deinit(testing.allocator);
+    slice.appendSlice(testing.allocator, &.{ "alpha", "beta" }) catch {};
+    try fs.stringSliceVar(&slice, "tag", &.{}, "");
     try fs.parse(&.{"--tag=gamma"});
 
     try testing.expectEqual(@as(usize, 3), slice.items.len);
@@ -982,7 +984,9 @@ test "StringArray with default values" {
     var fs = newTestFlagSet();
     defer fs.deinit();
     var slice: std.ArrayListUnmanaged([]const u8) = .empty;
-    try fs.stringArrayVar(&slice, "tag", &.{ "alpha", "beta" }, "");
+    defer slice.deinit(testing.allocator);
+    slice.appendSlice(testing.allocator, &.{ "alpha", "beta" }) catch {};
+    try fs.stringArrayVar(&slice, "tag", &.{}, "");
     try testing.expectEqual(@as(usize, 2), slice.items.len);
 }
 

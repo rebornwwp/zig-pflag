@@ -20,6 +20,12 @@ fn makeFloatVtable(comptime T: type) Value.VTable {
                 return @typeName(T);
             }
         }.tn,
+        .deinit = struct {
+            fn di(ptr: *anyopaque, gpa: std.mem.Allocator) void {
+                _ = ptr;
+                _ = gpa;
+            }
+        }.di,
     };
 }
 fn floatStrFn(comptime T: type) *const fn (*anyopaque, std.mem.Allocator) []const u8 {

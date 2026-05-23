@@ -12,6 +12,12 @@ const countVtable = Value.VTable{
             return "count";
         }
     }.tn,
+    .deinit = struct {
+        fn di(ptr: *anyopaque, gpa: std.mem.Allocator) void {
+            _ = ptr;
+            _ = gpa;
+        }
+    }.di,
 };
 fn countSetFn(ptr: *anyopaque, v: []const u8) !void {
     const p: *i32 = @ptrCast(@alignCast(ptr));

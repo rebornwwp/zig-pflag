@@ -107,7 +107,7 @@ Flag defaults (before parsing)
     	verbosity level
       --timeout=0s
     	timeout (30s/5m/2h/1d)
-  -t, --tag=default
+  -t, --tag
     	tags (repeatable)
       --expose
     	exposed ports
@@ -188,7 +188,7 @@ Flag usages (text)
     	verbosity level
       --timeout=0s
     	timeout (30s/5m/2h/1d)
-  -t, --tag=default
+  -t, --tag
     	tags (repeatable)
       --expose
     	exposed ports

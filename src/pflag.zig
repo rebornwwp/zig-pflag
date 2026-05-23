@@ -31,6 +31,7 @@ pub const Value = struct {
         set: *const fn (ptr: *anyopaque, val: []const u8) anyerror!void,
         string: *const fn (ptr: *anyopaque, gpa: std.mem.Allocator) []const u8,
         typeName: *const fn () []const u8,
+        deinit: *const fn (ptr: *anyopaque, gpa: std.mem.Allocator) void,
     };
 
     pub fn set(self: Value, val: []const u8) anyerror!void {
@@ -41,6 +42,9 @@ pub const Value = struct {
     }
     pub fn typeName(self: Value) []const u8 {
         return self.vtable.typeName();
+    }
+    pub fn deinit(self: Value, gpa: std.mem.Allocator) void {
+        return self.vtable.deinit(self.ptr, gpa);
     }
 };
 
@@ -91,6 +95,7 @@ pub const Flag = struct {
 
     pub fn deinit(self: *Flag, gpa: std.mem.Allocator) void {
         self.annotations.deinit(gpa);
+        self.value.deinit(gpa);
     }
 };
 
@@ -230,7 +235,8 @@ pub const FlagSet = struct {
         try self.stringSliceVarP(p, name, "", value, usage);
     }
     pub fn stringSliceVarP(self: *FlagSet, p: *std.ArrayListUnmanaged([]const u8), name: []const u8, shorthand: []const u8, value: []const []const u8, usage: []const u8) !void {
-        for (value) |v| p.append(self.gpa, self.gpa.dupe(u8, v) catch continue) catch {};
+        // Caller owns the ArrayList — pre-populate defaults themselves if needed.
+        _ = value;
         _ = try self.varP(stringSliceValue(p), name, shorthand, usage);
     }
 
@@ -271,7 +277,7 @@ pub const FlagSet = struct {
         try self.stringArrayVarP(p, name, "", value, usage);
     }
     pub fn stringArrayVarP(self: *FlagSet, p: *std.ArrayListUnmanaged([]const u8), name: []const u8, shorthand: []const u8, value: []const []const u8, usage: []const u8) !void {
-        for (value) |v| p.append(self.gpa, self.gpa.dupe(u8, v) catch continue) catch {};
+        _ = value;
         _ = try self.varP(stringArrayValue(p), name, shorthand, usage);
     }
 
@@ -403,19 +409,23 @@ pub const FlagSet = struct {
             if (f.hidden) continue;
             if (f.shorthand.len > 0) {
                 const line = std.fmt.allocPrint(gpa, "  -{s}, --{s}", .{ f.shorthand, f.name }) catch continue;
+                defer gpa.free(line);
                 buf.appendSlice(gpa, line) catch continue;
             } else {
                 const line = std.fmt.allocPrint(gpa, "      --{s}", .{f.name}) catch continue;
+                defer gpa.free(line);
                 buf.appendSlice(gpa, line) catch continue;
             }
             const hasDefault = !std.mem.eql(u8, f.def_value, "false") and !std.mem.eql(u8, f.def_value, "");
             const needsDefault = !std.mem.eql(u8, f.no_opt_def_val, "true");
             if (hasDefault and needsDefault) {
                 const dv = std.fmt.allocPrint(gpa, "={s}", .{f.def_value}) catch continue;
+                defer gpa.free(dv);
                 buf.appendSlice(gpa, dv) catch continue;
             }
             if (f.usage.len > 0) {
                 const u = std.fmt.allocPrint(gpa, "\n    \t{s}", .{f.usage}) catch continue;
+                defer gpa.free(u);
                 buf.appendSlice(gpa, u) catch continue;
             }
             if (f.deprecated.len > 0) buf.appendSlice(gpa, " (deprecated)") catch continue;

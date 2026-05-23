@@ -31,7 +31,9 @@ pub fn main(init: std.process.Init) !void {
     try fs.durationVar(&timeout, "timeout", 0, "timeout (30s/5m/2h/1d)");
 
     var tags: std.ArrayListUnmanaged([]const u8) = .empty;
-    try fs.stringSliceVarP(&tags, "tag", "t", &.{"default"}, "tags (repeatable)");
+    defer tags.deinit(gpa);
+    tags.append(gpa, "default") catch {};
+    try fs.stringSliceVarP(&tags, "tag", "t", &.{}, "tags (repeatable)");
     var ports: std.ArrayListUnmanaged(i32) = .empty;
     try fs.intSliceVar(i32, &ports, "expose", &.{}, "exposed ports");
     var flags: std.ArrayListUnmanaged(bool) = .empty;

@@ -8,6 +8,7 @@ const boolVtable = Value.VTable{
     .set = boolSetFn,
     .string = boolStrFn,
     .typeName = boolTypeNameFn,
+    .deinit = boolDeinitFn,
 };
 fn boolSetFn(ptr: *anyopaque, v: []const u8) !void {
     const p: *bool = @ptrCast(@alignCast(ptr));
@@ -23,6 +24,10 @@ fn boolStrFn(ptr: *anyopaque, gpa: std.mem.Allocator) []const u8 {
 }
 fn boolTypeNameFn() []const u8 {
     return "bool";
+}
+fn boolDeinitFn(ptr: *anyopaque, gpa: std.mem.Allocator) void {
+    _ = ptr;
+    _ = gpa;
 }
 
 pub fn boolValue(val: bool, p: *bool) Value {

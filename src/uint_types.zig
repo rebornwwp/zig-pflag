@@ -15,6 +15,7 @@ fn makeUintVtable(comptime T: type) Value.VTable {
         .set = uintSetFn(T),
         .string = uintStrFn(T),
         .typeName = uintTypeNameFn(T),
+        .deinit = uintDeinitFn(T),
     };
 }
 fn uintSetFn(comptime T: type) *const fn (*anyopaque, []const u8) anyerror!void {
@@ -39,6 +40,15 @@ fn uintTypeNameFn(comptime T: type) *const fn () []const u8 {
             return @typeName(T);
         }
     }.tn;
+}
+fn uintDeinitFn(comptime T: type) *const fn (*anyopaque, std.mem.Allocator) void {
+    _ = T;
+    return struct {
+        fn di(ptr: *anyopaque, gpa: std.mem.Allocator) void {
+            _ = ptr;
+            _ = gpa;
+        }
+    }.di;
 }
 
 pub fn uintValue(comptime T: type, val: T, p: *T) Value {

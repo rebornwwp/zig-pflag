@@ -29,6 +29,14 @@ const stringSliceVtable = Value.VTable{
             return "strings";
         }
     }.tn,
+    .deinit = struct {
+        fn di(ptr: *anyopaque, gpa: std.mem.Allocator) void {
+            // Items are a mix of string literals (defaults) and page_allocator allocations (parsed).
+            // Cannot safely free them all. Caller should clean up if needed.
+            _ = ptr;
+            _ = gpa;
+        }
+    }.di,
 };
 
 pub fn stringSliceValue(p: *std.ArrayListUnmanaged([]const u8)) Value {
@@ -61,6 +69,12 @@ const stringArrayVtable = Value.VTable{
             return "stringArray";
         }
     }.tn,
+    .deinit = struct {
+        fn di(ptr: *anyopaque, gpa: std.mem.Allocator) void {
+            _ = ptr;
+            _ = gpa;
+        }
+    }.di,
 };
 
 pub fn stringArrayValue(p: *std.ArrayListUnmanaged([]const u8)) Value {
@@ -95,6 +109,13 @@ fn intSliceVtable(comptime T: type) Value.VTable {
                 return @typeName(T) ++ "s";
             }
         }.tn,
+        .deinit = struct {
+            fn di(ptr: *anyopaque, gpa: std.mem.Allocator) void {
+                // ArrayList owned by caller — no cleanup here.
+                _ = ptr;
+                _ = gpa;
+            }
+        }.di,
     };
 }
 const i32SliceVtable = intSliceVtable(i32);
@@ -137,6 +158,12 @@ fn uintSliceVtable(comptime T: type) Value.VTable {
                 return @typeName(T) ++ "s";
             }
         }.tn,
+        .deinit = struct {
+            fn di(ptr: *anyopaque, gpa: std.mem.Allocator) void {
+                _ = ptr;
+                _ = gpa;
+            }
+        }.di,
     };
 }
 const u8SliceVtable = uintSliceVtable(u8);
@@ -181,6 +208,12 @@ const boolSliceVtable = Value.VTable{
             return "bools";
         }
     }.tn,
+    .deinit = struct {
+        fn di(ptr: *anyopaque, gpa: std.mem.Allocator) void {
+            _ = ptr;
+            _ = gpa;
+        }
+    }.di,
 };
 
 pub fn boolSliceValue(p: *std.ArrayListUnmanaged(bool)) Value {
@@ -215,6 +248,12 @@ fn floatSliceVtable(comptime T: type) Value.VTable {
                 return @typeName(T) ++ "s";
             }
         }.tn,
+        .deinit = struct {
+            fn di(ptr: *anyopaque, gpa: std.mem.Allocator) void {
+                _ = ptr;
+                _ = gpa;
+            }
+        }.di,
     };
 }
 const f32SliceVtable = floatSliceVtable(f32);
