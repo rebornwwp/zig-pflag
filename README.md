@@ -268,4 +268,4 @@ var cmd = cobra.Command{
 
 ## License
 
-MIT
+BSD 3-Clause

@@ -1,0 +1,10 @@
+zig-pflag
+Copyright (c) 2024-2026 zig-pflag contributors
+
+This product is a port of spf13/pflag (https://github.com/spf13/pflag),
+which is copyright (c) 2012 Alex Ogier and (c) 2012 The Go Authors,
+licensed under the BSD 3-Clause License.
+
+The original Go source code has been translated to Zig 0.16.0 with
+architectural adaptations for Zig's comptime generics and manual
+memory management.
