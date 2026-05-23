@@ -56,6 +56,153 @@ pub fn main(init: std.process.Init) !void {
 | stringToInt | `stringToIntVar(p, "h", 0, "")` | `--h=a=1 --h=b=2` |
 | stringToString | `stringToStringVar(p, "l", "", "")` | `--l=env=prod` |
 
+## Demo
+
+A fully working example demonstrating every flag type is included in `demo/main.zig`.
+
+### Run with default values
+
+```bash
+zig build run-demo
+```
+
+### Run with all flag types exercised
+
+```bash
+zig build run-demo -- \
+  -v \
+  --count=42 \
+  --big=9999999999 \
+  -p 9090 \
+  --rate=3.14 \
+  --name=zig \
+  -VVV \
+  --timeout=30s \
+  -t web -t api -t v2 \
+  --expose=80 --expose=443 --expose=8080 \
+  --flag --flag --flag \
+  --score=9.5 --score=8.0 --score=7.5 \
+  --header=Content-Length=100 --header=X-Timeout=30 \
+  --label=env=prod --label=region=us-east \
+  arg1 arg2 arg3
+```
+
+### Expected output
+
+```
+Flag defaults (before parsing)
+  -v, --verbose
+    	enable verbose output
+      --count=0
+    	the count (int32)
+      --big=0
+    	64-bit integer (deprecated: use --count instead)
+  -p, --port=8080
+    	port number
+      --rate=1
+    	request rate
+  -n, --name=world
+    	your name
+  -V, --verbosity=0
+    	verbosity level
+      --timeout=0s
+    	timeout (30s/5m/2h/1d)
+  -t, --tag=default
+    	tags (repeatable)
+      --expose
+    	exposed ports
+      --flag
+    	bool flags
+      --score
+    	scores
+      --header
+    	headers as key=value
+      --label
+    	labels as key=value
+
+Parsed values
+  verbose  = true
+  count    = 42
+  big      = 9999999999
+  port     = 9090
+  rate     = 3.14
+  name     = zig
+  verbosity= 3
+  timeout  = 30000000000
+
+Slice values
+  tag = default
+  tag = web
+  tag = api
+  tag = v2
+  expose = 80
+  expose = 443
+  expose = 8080
+  score = 9.5
+  score = 8
+  score = 7.5
+
+Map values
+  X-Timeout = 30
+  Content-Length = 100
+  env = prod
+  region = us-east
+
+Positional args
+  arg1
+  arg2
+  arg3
+
+Flags that were set
+  --verbose (changed=true)
+  --count (changed=true)
+  --big (changed=true)
+  --port (changed=true)
+  --rate (changed=true)
+  --name (changed=true)
+  --verbosity (changed=true)
+  --timeout (changed=true)
+  --tag (changed=true)
+  --expose (changed=true)
+  --flag (changed=true)
+  --score (changed=true)
+  --header (changed=true)
+  --label (changed=true)
+
+  nFlag() = 14, changed(verbose) = true
+
+Flag usages (text)
+  -v, --verbose
+    	enable verbose output
+      --count=0
+    	the count (int32)
+      --big=0
+    	64-bit integer (deprecated)
+  -p, --port=8080
+    	port number
+      --rate=1
+    	request rate
+  -n, --name=world
+    	your name
+  -V, --verbosity=0
+    	verbosity level
+      --timeout=0s
+    	timeout (30s/5m/2h/1d)
+  -t, --tag=default
+    	tags (repeatable)
+      --expose
+    	exposed ports
+      --flag
+    	bool flags
+      --score
+    	scores
+      --header
+    	headers as key=value
+      --label
+    	labels as key=value
+  annotation[name][category] = basic
+```
+
 ## FlagSet API
 
 | Method | Description |
