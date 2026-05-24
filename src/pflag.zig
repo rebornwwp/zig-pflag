@@ -281,12 +281,12 @@ pub const FlagSet = struct {
         _ = try self.varP(stringArrayValue(p), name, shorthand, usage);
     }
 
-    pub fn stringToIntVar(self: *FlagSet, p: *std.StringHashMapUnmanaged(i32), name: []const u8, value: i32, usage: []const u8) !void {
-        try self.stringToIntVarP(p, name, "", value, usage);
+    pub fn stringToIntVar(self: *FlagSet, comptime T: type, p: *std.StringHashMapUnmanaged(T), name: []const u8, value: T, usage: []const u8) !void {
+        try self.stringToIntVarP(T, p, name, "", value, usage);
     }
-    pub fn stringToIntVarP(self: *FlagSet, p: *std.StringHashMapUnmanaged(i32), name: []const u8, shorthand: []const u8, value: i32, usage: []const u8) !void {
+    pub fn stringToIntVarP(self: *FlagSet, comptime T: type, p: *std.StringHashMapUnmanaged(T), name: []const u8, shorthand: []const u8, value: T, usage: []const u8) !void {
         _ = value;
-        _ = try self.varP(stringToIntValue(p), name, shorthand, usage);
+        _ = try self.varP(stringToIntValue(T, p), name, shorthand, usage);
     }
 
     pub fn stringToStringVar(self: *FlagSet, p: *std.StringHashMapUnmanaged([]const u8), name: []const u8, value: []const u8, usage: []const u8) !void {

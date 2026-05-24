@@ -43,7 +43,7 @@ pub fn main(init: std.process.Init) !void {
     try fs.floatSliceVar(f32, &scores, "score", &.{}, "scores");
 
     var headers: std.StringHashMapUnmanaged(i32) = .empty;
-    try fs.stringToIntVar(&headers, "header", 0, "headers as key=value");
+    try fs.stringToIntVar(i32, &headers, "header", 0, "headers as key=value");
     var labels: std.StringHashMapUnmanaged([]const u8) = .empty;
     try fs.stringToStringVar(&labels, "label", "", "labels as key=value");
 

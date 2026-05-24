@@ -816,7 +816,7 @@ test "StringToIntVar maps key=value" {
     defer fs.deinit();
     fs.error_handling = .continue_on_error;
     var map: std.StringHashMapUnmanaged(i32) = .empty;
-    try fs.stringToIntVar(&map, "headers", 0, "header map");
+    try fs.stringToIntVar(i32, &map, "headers", 0, "header map");
     try fs.parse(&.{ "--headers=a=1", "--headers=b=2", "--headers=c=3" });
 
     try testing.expectEqual(@as(i32, 1), map.get("a").?);
@@ -829,7 +829,7 @@ test "StringToIntVar rejects non-key=value" {
     defer fs.deinit();
     fs.error_handling = .continue_on_error;
     var map: std.StringHashMapUnmanaged(i32) = .empty;
-    try fs.stringToIntVar(&map, "headers", 0, "");
+    try fs.stringToIntVar(i32, &map, "headers", 0, "");
     try testing.expectError(error.ExpectedKeyValue, fs.parse(&.{"--headers=badval"}));
 }
 
@@ -1042,4 +1042,27 @@ test "IntVar shorthand with uint" {
     try fs.uintVarP(u16, &val, "port", "p", 0, "");
     try fs.parse(&.{ "-p", "8080" });
     try testing.expectEqual(@as(u16, 8080), val);
+}
+
+// ── StringToInt with i64 ──
+
+test "StringToIntVar supports i64" {
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    fs.error_handling = .continue_on_error;
+    var map: std.StringHashMapUnmanaged(i64) = .empty;
+    try fs.stringToIntVar(i64, &map, "headers", 0, "header map (i64)");
+    try fs.parse(&.{ "--headers=x=9223372036854775807" });
+    try testing.expectEqual(@as(i64, 9223372036854775807), map.get("x").?);
+}
+
+test "StringToIntVar supports u32" {
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    fs.error_handling = .continue_on_error;
+    var map: std.StringHashMapUnmanaged(u32) = .empty;
+    try fs.stringToIntVar(u32, &map, "ports", 0, "port map");
+    try fs.parse(&.{ "--ports=web=80", "--ports=ssl=443" });
+    try testing.expectEqual(@as(u32, 80), map.get("web").?);
+    try testing.expectEqual(@as(u32, 443), map.get("ssl").?);
 }
