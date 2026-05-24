@@ -2,7 +2,43 @@
 
 POSIX/GNU-style flag parsing for Zig, ported from Go's [spf13/pflag](https://github.com/spf13/pflag) v1.0.9.
 
-Zig 0.16.0 · 12 source files · 910 lines · 87 tests
+Zig 0.16.0 · 12 source files · 2502 lines · 89 tests
+
+## Installation
+
+Add `pflag` to your project's `build.zig.zon`:
+
+```zig
+.{
+    .name = "myapp",
+    .version = "0.1.0",
+    .dependencies = .{
+        .pflag = .{
+            .url = "https://github.com/rebornwwp/zig-pflag/archive/v0.1.0.tar.gz",
+            // Run `zig build` to get the hash, then paste it here:
+            .hash = "1220...",
+        },
+    },
+    .paths = .{...},
+}
+```
+
+Then expose it in your `build.zig`:
+
+```zig
+pub fn build(b: *std.Build) void {
+    const pflag_dep = b.dependency("pflag", .{});
+    const your_module = b.createModule(.{
+        .root_source_file = b.path("src/main.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "pflag", .module = pflag_dep.module("pflag") },
+        },
+    });
+    // ...
+}
+```
 
 ## Quick Start
 
@@ -53,7 +89,7 @@ pub fn main(init: std.process.Init) !void {
 | boolSlice | `boolSliceVar(p, "flag", &.{}, "")` | `--flag --flag` |
 | floatSlice | `floatSliceVar(f64, p, "v", &.{}, "")` | `--v=1.0 --v=2.5` |
 | uintSlice | `uintSliceVar(u32, p, "p", &.{}, "")` | `--p=80 --p=443` |
-| stringToInt | `stringToIntVar(p, "h", 0, "")` | `--h=a=1 --h=b=2` |
+| stringToInt | `stringToIntVar(i32, p, "h", 0, "")` | `--h=a=1 --h=b=2` |
 | stringToString | `stringToStringVar(p, "l", "", "")` | `--l=env=prod` |
 
 ## Port Status
@@ -91,8 +127,8 @@ Compared against Go [spf13/pflag v1.0.9](https://github.com/spf13/pflag). ✅ = 
 
 | Go Type | Zig Support | Notes |
 |---------|:-----------:|-------|
-| stringToInt | ✅ | `stringToIntVar` / `stringToIntVarP` |
-| stringToInt64 | ❌ | i32 only; i64 variant not yet ported |
+| stringToInt | ✅ | `stringToIntVar(T)` / `stringToIntVarP(T)`, i32/i64/u32/u64 |
+| stringToInt64 | ✅ | Covered by comptime-generic `stringToIntVar` with i64 |
 | stringToString | ✅ | `stringToStringVar` / `stringToStringVarP` |
 
 ### Network & Special Types
@@ -107,7 +143,7 @@ Compared against Go [spf13/pflag v1.0.9](https://github.com/spf13/pflag). ✅ = 
 | time | ❌ | `time.Time` adapter |
 | golangflag | — | Go stdlib `flag` wrapper, not applicable |
 
-> **Summary**: 15 of 26 Go pflag types are fully ported. Network types (ip, ipMask, ipNet) and specialty adapters (bytes, func, text, time) remain as future work.
+> **Summary**: 16 of 26 Go pflag types are fully ported. Network types (ip, ipMask, ipNet) and specialty adapters (bytes, func, text, time) remain as future work.
 
 ## Demo
 
@@ -297,7 +333,7 @@ src/
 ├── duration_types.zig # Duration type (s/m/h/d)
 ├── slice_types.zig    # string/int/uint/bool/float slices
 ├── map_types.zig      # string→int, string→string maps
-└── pflag_test.zig     # 87 tests
+└── pflag_test.zig     # 89 tests
 ```
 
 ## Usage with zig-cobra

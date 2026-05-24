@@ -1052,7 +1052,7 @@ test "StringToIntVar supports i64" {
     fs.error_handling = .continue_on_error;
     var map: std.StringHashMapUnmanaged(i64) = .empty;
     try fs.stringToIntVar(i64, &map, "headers", 0, "header map (i64)");
-    try fs.parse(&.{ "--headers=x=9223372036854775807" });
+    try fs.parse(&.{"--headers=x=9223372036854775807"});
     try testing.expectEqual(@as(i64, 9223372036854775807), map.get("x").?);
 }
 

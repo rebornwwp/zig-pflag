@@ -36,10 +36,15 @@ fn strToIntVtableGen(comptime T: type) Value.VTable {
             }
         }.string,
         .typeName = struct {
-            fn tn() []const u8 { return "stringTo" ++ @typeName(T); }
+            fn tn() []const u8 {
+                return "stringTo" ++ @typeName(T);
+            }
         }.tn,
         .deinit = struct {
-            fn di(ptr: *anyopaque, gpa: std.mem.Allocator) void { _ = ptr; _ = gpa; }
+            fn di(ptr: *anyopaque, gpa: std.mem.Allocator) void {
+                _ = ptr;
+                _ = gpa;
+            }
         }.di,
     };
 }
