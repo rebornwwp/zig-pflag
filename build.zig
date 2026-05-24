@@ -4,7 +4,7 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const lib_mod = b.createModule(.{
+    const lib_mod = b.addModule("pflag", .{
         .root_source_file = b.path("src/pflag.zig"),
         .target = target,
         .optimize = optimize,
