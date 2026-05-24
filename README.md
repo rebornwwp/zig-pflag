@@ -6,7 +6,7 @@ Zig 0.16.0 · 12 source files · 2502 lines · 89 tests
 
 ## Installation
 
-Add `pflag` to your project's `build.zig.zon`:
+### Step 1 — Add dependency to `build.zig.zon`
 
 ```zig
 .{
@@ -14,31 +14,57 @@ Add `pflag` to your project's `build.zig.zon`:
     .version = "0.1.0",
     .dependencies = .{
         .pflag = .{
-            .url = "https://github.com/rebornwwp/zig-pflag/archive/v0.1.0.tar.gz",
-            // Run `zig build` to get the hash, then paste it here:
-            .hash = "1220...",
+            .url = "https://github.com/rebornwwp/zig-pflag/archive/main.tar.gz",
         },
     },
     .paths = .{...},
 }
 ```
 
-Then expose it in your `build.zig`:
+### Step 2 — 获取 hash
+
+Zig 包管理器需要文件的完整性校验 hash。先**不填** `.hash` 字段，运行 `zig build`，构建系统会报错并给出正确的 hash 值，复制粘贴即可。
+
+```bash
+zig build
+# 输出类似：
+# error: hash mismatch:
+#   expected: 1220ec9ef11e590d3e28bb0ff9024de7da5a7e95e01e7506ec1a38c7e3a3f4e2e77e
+```
+
+或者用 `zig fetch` 直接获取：
+
+```bash
+zig fetch https://github.com/rebornwwp/zig-pflag/archive/main.tar.gz
+```
+
+将输出的 hash 填入 `.hash` 字段。
+
+### Step 3 — 在 `build.zig` 中引入模块
 
 ```zig
 pub fn build(b: *std.Build) void {
+    const target = b.standardTargetOptions(.{});
+    const optimize = b.standardOptimizeOption(.{});
+
     const pflag_dep = b.dependency("pflag", .{});
-    const your_module = b.createModule(.{
-        .root_source_file = b.path("src/main.zig"),
-        .target = target,
-        .optimize = optimize,
-        .imports = &.{
-            .{ .name = "pflag", .module = pflag_dep.module("pflag") },
-        },
+
+    const exe = b.addExecutable(.{
+        .name = "myapp",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "pflag", .module = pflag_dep.module("pflag") },
+            },
+        }),
     });
-    // ...
+    b.installArtifact(exe);
 }
 ```
+
+之后在代码中直接 `const pflag = @import("pflag");` 即可使用。
 
 ## Quick Start
 
