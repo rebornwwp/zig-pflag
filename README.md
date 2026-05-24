@@ -56,6 +56,59 @@ pub fn main(init: std.process.Init) !void {
 | stringToInt | `stringToIntVar(p, "h", 0, "")` | `--h=a=1 --h=b=2` |
 | stringToString | `stringToStringVar(p, "l", "", "")` | `--l=env=prod` |
 
+## Port Status
+
+Compared against Go [spf13/pflag v1.0.9](https://github.com/spf13/pflag). ✅ = implemented, ❌ = not yet ported.
+
+### Basic Types
+
+| Go Type | Zig Support | Notes |
+|---------|:-----------:|-------|
+| bool | ✅ | `boolVar` / `boolVarP` |
+| count | ✅ | `countVar` / `countVarP` |
+| int, int8, int16, int32, int64 | ✅ | `intVar(T)` / `intVarP(T)`, comptime-generic |
+| uint, uint8, uint16, uint32, uint64 | ✅ | `uintVar(T)` / `uintVarP(T)`, comptime-generic |
+| float32, float64 | ✅ | `floatVar(T)` / `floatVarP(T)`, comptime-generic |
+| string | ✅ | `stringVar` / `stringVarP` |
+| duration | ✅ | `durationVar` / `durationVarP` |
+| bytes | ❌ | BytesHex / BytesBase64 flag types |
+| func | ❌ | Callback-based flag dispatch |
+| text | ❌ | `encoding.TextUnmarshaler` adapter |
+
+### Slice Types
+
+| Go Type | Zig Support | Notes |
+|---------|:-----------:|-------|
+| boolSlice | ✅ | `boolSliceVar` / `boolSliceVarP` |
+| intSlice, int32Slice, int64Slice | ✅ | `intSliceVar(T)` / `intSliceVarP(T)`, i32 + i64 |
+| uintSlice | ✅ | `uintSliceVar(T)` / `uintSliceVarP(T)`, u8–u64 |
+| float32Slice, float64Slice | ✅ | `floatSliceVar(T)` / `floatSliceVarP(T)` |
+| stringSlice | ✅ | `stringSliceVar` / `stringSliceVarP` |
+| stringArray | ✅ | `stringArrayVar` / `stringArrayVarP` |
+| durationSlice | ❌ | Repeatable duration flags |
+
+### Map Types
+
+| Go Type | Zig Support | Notes |
+|---------|:-----------:|-------|
+| stringToInt | ✅ | `stringToIntVar` / `stringToIntVarP` |
+| stringToInt64 | ❌ | i32 only; i64 variant not yet ported |
+| stringToString | ✅ | `stringToStringVar` / `stringToStringVarP` |
+
+### Network & Special Types
+
+| Go Type | Zig Support | Notes |
+|---------|:-----------:|-------|
+| ip | ❌ | IP address validation |
+| ipMask | ❌ | Subnet mask |
+| ipNet | ❌ | CIDR network |
+| ipSlice | ❌ | Repeatable IP addresses |
+| ipNetSlice | ❌ | Repeatable CIDR networks |
+| time | ❌ | `time.Time` adapter |
+| golangflag | — | Go stdlib `flag` wrapper, not applicable |
+
+> **Summary**: 15 of 26 Go pflag types are fully ported. Network types (ip, ipMask, ipNet) and specialty adapters (bytes, func, text, time) remain as future work.
+
 ## Demo
 
 A fully working example demonstrating every flag type is included in `demo/main.zig`.
