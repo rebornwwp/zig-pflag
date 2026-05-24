@@ -2,13 +2,13 @@
 
 [English](README.md) | [中文文档](README_CN.md)
 
-POSIX/GNU-style flag parsing for Zig, ported from Go's [spf13/pflag](https://github.com/spf13/pflag) v1.0.9.
+Zig 的 POSIX/GNU 风格命令行参数解析库，从 Go 的 [spf13/pflag](https://github.com/spf13/pflag) v1.0.9 移植而来。
 
-Zig 0.16.0 · 12 source files · 2502 lines · 89 tests
+Zig 0.16.0 · 12 个源文件 · 2502 行代码 · 89 个测试
 
-## Installation
+## 安装
 
-### Step 1 — Add dependency to `build.zig.zon`
+### 步骤 1 — 在 `build.zig.zon` 中添加依赖
 
 ```zig
 .{
@@ -23,26 +23,26 @@ Zig 0.16.0 · 12 source files · 2502 lines · 89 tests
 }
 ```
 
-### Step 2 — Get the hash
+### 步骤 2 — 获取 hash 值
 
-The Zig package manager requires a content hash for integrity verification. Leave the `.hash` field **empty** first, run `zig build`, and the build system will error with the correct hash — copy and paste it.
+Zig 包管理器需要文件的完整性校验 hash。先**不填** `.hash` 字段，运行 `zig build`，构建系统会报错并给出正确的 hash 值，复制粘贴即可。
 
 ```bash
 zig build
-# Example output:
+# 输出示例：
 # error: hash mismatch:
 #   expected: 1220ec9ef11e590d3e28bb0ff9024de7da5a7e95e01e7506ec1a38c7e3a3f4e2e77e
 ```
 
-Or use `zig fetch` to get it directly:
+或者用 `zig fetch` 直接获取：
 
 ```bash
 zig fetch https://github.com/rebornwwp/zig-pflag/archive/main.tar.gz
 ```
 
-Copy the output hash into the `.hash` field.
+将输出的 hash 填入 `.hash` 字段。
 
-### Step 3 — Import the module in `build.zig`
+### 步骤 3 — 在 `build.zig` 中引入模块
 
 ```zig
 pub fn build(b: *std.Build) void {
@@ -66,9 +66,9 @@ pub fn build(b: *std.Build) void {
 }
 ```
 
-Then use `const pflag = @import("pflag");` in your code.
+之后在代码中直接 `const pflag = @import("pflag");` 即可使用。
 
-## Quick Start
+## 快速开始
 
 ```zig
 const std = @import("std");
@@ -88,30 +88,30 @@ pub fn main(init: std.process.Init) !void {
     try fs.stringVarP(&name, "name", "n", "world", "your name");
     try fs.intVar(i32, &count, "count", 42, "the count");
 
-    // Read args, skip program name
+    // 读取参数，跳过程序名
     const alloc = init.arena.allocator();
     const raw = try init.minimal.args.toSlice(alloc);
     const effective = if (raw.len > 1) raw[1..] else &.{};
     try fs.parse(effective);
 
-    // Use parsed values
+    // 使用解析后的值
     if (verbose) std.debug.print("verbose mode on\n", .{});
     std.debug.print("hello {s}! count={d}\n", .{ name, count });
     std.debug.print("remaining args: {any}\n", .{fs.argList()});
 }
 ```
 
-## Supported Flag Types
+## 支持的参数类型
 
-| Type | Construction | Parse `--flag=value` / `-f value` |
+| 类型 | 构造方法 | 解析 `--flag=value` / `-f value` |
 |------|-------------|-----------------------------------|
 | bool | `boolVarP(p, "verbose", "v", false, "")` | `-v` / `--verbose` / `--verbose=true` |
 | int i8–i64 | `intVar(i32, p, "count", 0, "")` | `--count=42` / `--count 42` |
 | uint u8–u64 | `uintVar(u32, p, "port", 0, "")` | `--port=8080` |
 | float f32/f64 | `floatVar(f64, p, "rate", 0, "")` | `--rate=3.14` |
 | string | `stringVarP(p, "name", "n", "", "")` | `--name Alice` / `-n Alice` |
-| count | `countVarP(p, "v", "v", 0, "")` | `-vvv` (value = 3) |
-| duration | `durationVar(p, "timeout", 0, "")` | `--timeout=30s` (ns) |
+| count | `countVarP(p, "v", "v", 0, "")` | `-vvv`（值为 3） |
+| duration | `durationVar(p, "timeout", 0, "")` | `--timeout=30s`（纳秒） |
 | stringSlice | `stringSliceVarP(p, "tag", "t", &.{}, "")` | `-t a -t b` |
 | intSlice | `intSliceVar(i32, p, "port", &.{}, "")` | `--port=80 --port=443` |
 | boolSlice | `boolSliceVar(p, "flag", &.{}, "")` | `--flag --flag` |
@@ -120,70 +120,70 @@ pub fn main(init: std.process.Init) !void {
 | stringToInt | `stringToIntVar(i32, p, "h", 0, "")` | `--h=a=1 --h=b=2` |
 | stringToString | `stringToStringVar(p, "l", "", "")` | `--l=env=prod` |
 
-## Port Status
+## 移植状态
 
-Compared against Go [spf13/pflag v1.0.9](https://github.com/spf13/pflag). ✅ = implemented, ❌ = not yet ported.
+与 Go [spf13/pflag v1.0.9](https://github.com/spf13/pflag) 对比。✅ = 已实现，❌ = 尚未移植。
 
-### Basic Types
+### 基本类型
 
-| Go Type | Zig Support | Notes |
+| Go 类型 | Zig 支持 | 说明 |
 |---------|:-----------:|-------|
 | bool | ✅ | `boolVar` / `boolVarP` |
 | count | ✅ | `countVar` / `countVarP` |
-| int, int8, int16, int32, int64 | ✅ | `intVar(T)` / `intVarP(T)`, comptime-generic |
-| uint, uint8, uint16, uint32, uint64 | ✅ | `uintVar(T)` / `uintVarP(T)`, comptime-generic |
-| float32, float64 | ✅ | `floatVar(T)` / `floatVarP(T)`, comptime-generic |
+| int, int8, int16, int32, int64 | ✅ | `intVar(T)` / `intVarP(T)`，comptime 泛型 |
+| uint, uint8, uint16, uint32, uint64 | ✅ | `uintVar(T)` / `uintVarP(T)`，comptime 泛型 |
+| float32, float64 | ✅ | `floatVar(T)` / `floatVarP(T)`，comptime 泛型 |
 | string | ✅ | `stringVar` / `stringVarP` |
 | duration | ✅ | `durationVar` / `durationVarP` |
-| bytes | ❌ | BytesHex / BytesBase64 flag types |
-| func | ❌ | Callback-based flag dispatch |
-| text | ❌ | `encoding.TextUnmarshaler` adapter |
+| bytes | ❌ | BytesHex / BytesBase64 类型 |
+| func | ❌ | 回调式参数分发 |
+| text | ❌ | `encoding.TextUnmarshaler` 适配器 |
 
-### Slice Types
+### 切片类型
 
-| Go Type | Zig Support | Notes |
+| Go 类型 | Zig 支持 | 说明 |
 |---------|:-----------:|-------|
 | boolSlice | ✅ | `boolSliceVar` / `boolSliceVarP` |
-| intSlice, int32Slice, int64Slice | ✅ | `intSliceVar(T)` / `intSliceVarP(T)`, i32 + i64 |
-| uintSlice | ✅ | `uintSliceVar(T)` / `uintSliceVarP(T)`, u8–u64 |
+| intSlice, int32Slice, int64Slice | ✅ | `intSliceVar(T)` / `intSliceVarP(T)`，i32 + i64 |
+| uintSlice | ✅ | `uintSliceVar(T)` / `uintSliceVarP(T)`，u8–u64 |
 | float32Slice, float64Slice | ✅ | `floatSliceVar(T)` / `floatSliceVarP(T)` |
 | stringSlice | ✅ | `stringSliceVar` / `stringSliceVarP` |
 | stringArray | ✅ | `stringArrayVar` / `stringArrayVarP` |
-| durationSlice | ❌ | Repeatable duration flags |
+| durationSlice | ❌ | 可重复的 duration 参数 |
 
-### Map Types
+### Map 类型
 
-| Go Type | Zig Support | Notes |
+| Go 类型 | Zig 支持 | 说明 |
 |---------|:-----------:|-------|
-| stringToInt | ✅ | `stringToIntVar(T)` / `stringToIntVarP(T)`, i32/i64/u32/u64 |
-| stringToInt64 | ✅ | Covered by comptime-generic `stringToIntVar` with i64 |
+| stringToInt | ✅ | `stringToIntVar(T)` / `stringToIntVarP(T)`，i32/i64/u32/u64 |
+| stringToInt64 | ✅ | 已由 comptime 泛型的 `stringToIntVar` with i64 覆盖 |
 | stringToString | ✅ | `stringToStringVar` / `stringToStringVarP` |
 
-### Network & Special Types
+### 网络与特殊类型
 
-| Go Type | Zig Support | Notes |
+| Go 类型 | Zig 支持 | 说明 |
 |---------|:-----------:|-------|
-| ip | ❌ | IP address validation |
-| ipMask | ❌ | Subnet mask |
-| ipNet | ❌ | CIDR network |
-| ipSlice | ❌ | Repeatable IP addresses |
-| ipNetSlice | ❌ | Repeatable CIDR networks |
-| time | ❌ | `time.Time` adapter |
-| golangflag | — | Go stdlib `flag` wrapper, not applicable |
+| ip | ❌ | IP 地址校验 |
+| ipMask | ❌ | 子网掩码 |
+| ipNet | ❌ | CIDR 网络 |
+| ipSlice | ❌ | 可重复的 IP 地址 |
+| ipNetSlice | ❌ | 可重复的 CIDR 网络 |
+| time | ❌ | `time.Time` 适配器 |
+| golangflag | — | Go 标准库 `flag` 封装，不适用 |
 
-> **Summary**: 16 of 26 Go pflag types are fully ported. Network types (ip, ipMask, ipNet) and specialty adapters (bytes, func, text, time) remain as future work.
+> **总结**：Go pflag 的 26 种类型中已有 16 种完成移植。网络类型（ip、ipMask、ipNet）和特殊适配器（bytes、func、text、time）留待后续工作。
 
-## Demo
+## 示例
 
-A fully working example demonstrating every flag type is included in `demo/main.zig`.
+`demo/main.zig` 中包含了一个展示所有参数类型的完整示例。
 
-### Run with default values
+### 使用默认值运行
 
 ```bash
 zig build run-demo
 ```
 
-### Run with all flag types exercised
+### 使用所有参数类型运行
 
 ```bash
 zig build run-demo -- \
@@ -204,38 +204,38 @@ zig build run-demo -- \
   arg1 arg2 arg3
 ```
 
-### Expected output
+### 预期输出
 
 ```
 Flag defaults (before parsing)
   -v, --verbose
-    	enable verbose output
+     	enable verbose output
       --count=0
-    	the count (int32)
+     	the count (int32)
       --big=0
-    	64-bit integer (deprecated: use --count instead)
+     	64-bit integer (deprecated: use --count instead)
   -p, --port=8080
-    	port number
+     	port number
       --rate=1
-    	request rate
+     	request rate
   -n, --name=world
-    	your name
+     	your name
   -V, --verbosity=0
-    	verbosity level
+     	verbosity level
       --timeout=0s
-    	timeout (30s/5m/2h/1d)
+     	timeout (30s/5m/2h/1d)
   -t, --tag
-    	tags (repeatable)
+     	tags (repeatable)
       --expose
-    	exposed ports
+     	exposed ports
       --flag
-    	bool flags
+     	bool flags
       --score
-    	scores
+     	scores
       --header
-    	headers as key=value
+     	headers as key=value
       --label
-    	labels as key=value
+     	labels as key=value
 
 Parsed values
   verbose  = true
@@ -290,81 +290,81 @@ Flags that were set
 
 Flag usages (text)
   -v, --verbose
-    	enable verbose output
+     	enable verbose output
       --count=0
-    	the count (int32)
+     	the count (int32)
       --big=0
-    	64-bit integer (deprecated)
+     	64-bit integer (deprecated)
   -p, --port=8080
-    	port number
+     	port number
       --rate=1
-    	request rate
+     	request rate
   -n, --name=world
-    	your name
+     	your name
   -V, --verbosity=0
-    	verbosity level
+     	verbosity level
       --timeout=0s
-    	timeout (30s/5m/2h/1d)
+     	timeout (30s/5m/2h/1d)
   -t, --tag
-    	tags (repeatable)
+     	tags (repeatable)
       --expose
-    	exposed ports
+     	exposed ports
       --flag
-    	bool flags
+     	bool flags
       --score
-    	scores
+     	scores
       --header
-    	headers as key=value
+     	headers as key=value
       --label
-    	labels as key=value
+     	labels as key=value
   annotation[name][category] = basic
 ```
 
 ## FlagSet API
 
-| Method | Description |
+| 方法 | 说明 |
 |--------|-------------|
-| `parse(args)` | Parse `[]const []const u8` argument list |
-| `parseAll(args, callback)` | Parse with custom per-flag callback |
-| `lookup(name)` | Find flag by name |
-| `shorthandLookup(c)` | Find flag by shorthand char |
-| `set(name, value)` | Set flag value programmatically |
-| `changed(name)` | Check if flag was set by user |
-| `arg(i)` | Get i‑th positional argument |
-| `argList()` / `nArg()` | Positional args after flags |
-| `nFlag()` | Count of flags that were set |
-| `visit(ctx, fn)` / `visitAll(ctx, fn)` | Iterate set/all flags |
-| `markHidden(name)` | Hide flag from usage |
-| `markDeprecated(name, msg)` | Mark flag as deprecated |
-| `markShorthandDeprecated(name, msg)` | Mark shorthand as deprecated |
-| `setAnnotation(name, key, values)` | Attach metadata to flag |
-| `getAnnotation(name, key)` | Read flag metadata |
-| `flagUsages()` / `printDefaults()` | Format / print usage text |
-| `setNormalizeFunc(fn)` | Custom flag name normalizer |
-| `getNormalizeFunc()` | Get current normalizer |
-| `addFlagSet(other)` | Merge another FlagSet |
-| `hasFlags()` / `hasAvailableFlags()` | Query flag state |
-| `lastError()` | Details of last parse error |
+| `parse(args)` | 解析 `[]const []const u8` 参数列表 |
+| `parseAll(args, callback)` | 解析并为每个参数调用自定义回调 |
+| `lookup(name)` | 按名称查找参数 |
+| `shorthandLookup(c)` | 按短选项字符查找参数 |
+| `set(name, value)` | 以编程方式设置参数值 |
+| `changed(name)` | 检查参数是否被用户设置过 |
+| `arg(i)` | 获取第 i 个位置参数 |
+| `argList()` / `nArg()` | 参数标志之后的位置参数 |
+| `nFlag()` | 被设置的参数数量 |
+| `visit(ctx, fn)` / `visitAll(ctx, fn)` | 遍历已设置/所有参数 |
+| `markHidden(name)` | 从帮助信息中隐藏参数 |
+| `markDeprecated(name, msg)` | 标记参数为已弃用 |
+| `markShorthandDeprecated(name, msg)` | 标记短选项为已弃用 |
+| `setAnnotation(name, key, values)` | 为参数附加元数据 |
+| `getAnnotation(name, key)` | 读取参数元数据 |
+| `flagUsages()` / `printDefaults()` | 格式化/打印帮助文本 |
+| `setNormalizeFunc(fn)` | 自定义参数名规范化函数 |
+| `getNormalizeFunc()` | 获取当前的规范化函数 |
+| `addFlagSet(other)` | 合并另一个 FlagSet |
+| `hasFlags()` / `hasAvailableFlags()` | 查询参数状态 |
+| `lastError()` | 获取最后一次解析错误的详情 |
 
-## File Layout
+## 文件结构
 
 ```
 src/
-├── pflag.zig          # Value, Flag, FlagSet, parse engine
-├── errors.zig         # ParseError, ErrorHandling
-├── bool_types.zig     # Bool flag type
-├── int_types.zig      # Int types (i8–i64, comptime-generic)
-├── uint_types.zig     # Uint types (u8–u64)
-├── float_types.zig    # Float types (f32/f64)
-├── string_types.zig   # String flag type
-├── count_types.zig    # Count flag type
-├── duration_types.zig # Duration type (s/m/h/d)
-├── slice_types.zig    # string/int/uint/bool/float slices
-├── map_types.zig      # string→int, string→string maps
-└── pflag_test.zig     # 89 tests
+├── pflag.zig          # Value、Flag、FlagSet、解析引擎
+├── errors.zig         # ParseError、ErrorHandling
+├── bool_types.zig     # Bool 参数类型
+├── int_types.zig      # Int 类型（i8–i64，comptime 泛型）
+├── uint_types.zig     # Uint 类型（u8–u64）
+├── float_types.zig    # Float 类型（f32/f64）
+├── string_types.zig   # String 参数类型
+├── count_types.zig    # Count 参数类型
+├── duration_types.zig # Duration 类型（s/m/h/d）
+├── slice_types.zig    # string/int/uint/bool/float 切片
+├── map_types.zig      # string→int、string→string map
+└── pflag_test.zig     # 89 个测试
 ```
 
-## Usage with zig-cobra
+## 配合 zig-cobra 使用
 
 ```zig
 const cobra = @import("cobra");
@@ -383,6 +383,6 @@ var cmd = cobra.Command{
 };
 ```
 
-## License
+## 许可证
 
 BSD 3-Clause
