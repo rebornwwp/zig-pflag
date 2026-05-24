@@ -21,26 +21,26 @@ Zig 0.16.0 · 12 source files · 2502 lines · 89 tests
 }
 ```
 
-### Step 2 — 获取 hash
+### Step 2 — Get the hash
 
-Zig 包管理器需要文件的完整性校验 hash。先**不填** `.hash` 字段，运行 `zig build`，构建系统会报错并给出正确的 hash 值，复制粘贴即可。
+The Zig package manager requires a content hash for integrity verification. Leave the `.hash` field **empty** first, run `zig build`, and the build system will error with the correct hash — copy and paste it.
 
 ```bash
 zig build
-# 输出类似：
+# Example output:
 # error: hash mismatch:
 #   expected: 1220ec9ef11e590d3e28bb0ff9024de7da5a7e95e01e7506ec1a38c7e3a3f4e2e77e
 ```
 
-或者用 `zig fetch` 直接获取：
+Or use `zig fetch` to get it directly:
 
 ```bash
 zig fetch https://github.com/rebornwwp/zig-pflag/archive/main.tar.gz
 ```
 
-将输出的 hash 填入 `.hash` 字段。
+Copy the output hash into the `.hash` field.
 
-### Step 3 — 在 `build.zig` 中引入模块
+### Step 3 — Import the module in `build.zig`
 
 ```zig
 pub fn build(b: *std.Build) void {
@@ -64,7 +64,7 @@ pub fn build(b: *std.Build) void {
 }
 ```
 
-之后在代码中直接 `const pflag = @import("pflag");` 即可使用。
+Then use `const pflag = @import("pflag");` in your code.
 
 ## Quick Start
 
