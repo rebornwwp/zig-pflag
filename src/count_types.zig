@@ -21,16 +21,18 @@ const countVtable = Value.VTable{
 };
 fn countSetFn(ptr: *anyopaque, v: []const u8) !void {
     const p: *i32 = @ptrCast(@alignCast(ptr));
-    if (v.len == 0) {
+    // "+1" means no specific value was passed (shorthand without value), so increment
+    if (std.mem.eql(u8, v, "+1")) {
         p.* += 1;
         return;
     }
+    // Otherwise, parse and assign the value
     const n = try std.fmt.parseInt(i32, v, 0);
-    p.* += n;
+    p.* = n;
 }
-fn countStrFn(ptr: *anyopaque, gpa: std.mem.Allocator) []const u8 {
+fn countStrFn(ptr: *anyopaque, gpa: std.mem.Allocator) anyerror![]const u8 {
     const p: *i32 = @ptrCast(@alignCast(ptr));
-    return std.fmt.allocPrint(gpa, "{d}", .{p.*}) catch "?";
+    return std.fmt.allocPrint(gpa, "{d}", .{p.*});
 }
 
 pub fn countValue(val: i32, p: *i32) Value {

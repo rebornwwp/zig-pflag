@@ -26,11 +26,11 @@ fn intSetFn(comptime T: type) *const fn (*anyopaque, []const u8) anyerror!void {
         }
     }.set;
 }
-fn intStrFn(comptime T: type) *const fn (*anyopaque, std.mem.Allocator) []const u8 {
+fn intStrFn(comptime T: type) *const fn (*anyopaque, std.mem.Allocator) anyerror![]const u8 {
     return struct {
-        fn str(ptr: *anyopaque, gpa: std.mem.Allocator) []const u8 {
+        fn str(ptr: *anyopaque, gpa: std.mem.Allocator) anyerror![]const u8 {
             const p: *T = @ptrCast(@alignCast(ptr));
-            return std.fmt.allocPrint(gpa, "{d}", .{p.*}) catch "?";
+            return std.fmt.allocPrint(gpa, "{d}", .{p.*});
         }
     }.str;
 }

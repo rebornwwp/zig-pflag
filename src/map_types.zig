@@ -6,33 +6,58 @@ const Value = pflag.Value;
 
 // ─── String → Int (comptime-generic: i8-i64, u8-u64) ───
 
+/// Wrapper struct to track changed state for StringToInt map values.
+/// First Set replaces defaults; subsequent Sets merge.
+pub fn StringToIntState(comptime T: type) type {
+    return struct {
+        value: *std.StringHashMapUnmanaged(T),
+        gpa: std.mem.Allocator = std.heap.page_allocator,
+        changed: bool = false,
+    };
+}
+
 fn strToIntVtableGen(comptime T: type) Value.VTable {
     return .{
         .set = struct {
             fn set(ptr: *anyopaque, v: []const u8) !void {
-                const map: *std.StringHashMapUnmanaged(T) = @ptrCast(@alignCast(ptr));
-                const eq = std.mem.indexOfScalar(u8, v, '=') orelse return error.ExpectedKeyValue;
-                const key = v[0..eq];
-                const val_str = v[eq + 1 ..];
-                const val = try std.fmt.parseInt(T, val_str, 0);
-                try map.put(std.heap.page_allocator, key, val);
+                const State = StringToIntState(T);
+                const state: *State = @ptrCast(@alignCast(ptr));
+                const map = state.value;
+                const gpa = state.gpa;
+                var it = std.mem.splitScalar(u8, v, ',');
+                while (it.next()) |pair| {
+                    const trimmed = std.mem.trim(u8, pair, " \t");
+                    if (trimmed.len == 0) continue;
+                    const eq = std.mem.indexOfScalar(u8, trimmed, '=') orelse return error.ExpectedKeyValue;
+                    const key = trimmed[0..eq];
+                    const val_str = trimmed[eq + 1 ..];
+                    const val = try std.fmt.parseInt(T, val_str, 0);
+                    if (!state.changed) {
+                        map.clearRetainingCapacity();
+                        state.changed = true;
+                    }
+                    try map.put(gpa, key, val);
+                }
+                if (!state.changed) state.changed = true;
             }
         }.set,
         .string = struct {
-            fn string(ptr: *anyopaque, gpa: std.mem.Allocator) []const u8 {
-                const map: *std.StringHashMapUnmanaged(T) = @ptrCast(@alignCast(ptr));
+            fn string(ptr: *anyopaque, gpa: std.mem.Allocator) anyerror![]const u8 {
+                const State = StringToIntState(T);
+                const state: *State = @ptrCast(@alignCast(ptr));
+                const map = state.value;
                 var buf: std.ArrayListUnmanaged(u8) = .empty;
                 var it = map.iterator();
                 var first = true;
                 while (it.next()) |entry| {
-                    if (!first) buf.appendSlice(gpa, ", ") catch break;
+                    if (!first) try buf.appendSlice(gpa, ", ");
                     first = false;
                     var tmp: [64]u8 = undefined;
-                    buf.appendSlice(gpa, entry.key_ptr.*) catch break;
-                    buf.appendSlice(gpa, "=") catch break;
-                    buf.appendSlice(gpa, std.fmt.bufPrint(&tmp, "{d}", .{entry.value_ptr.*}) catch "?") catch break;
+                    try buf.appendSlice(gpa, entry.key_ptr.*);
+                    try buf.appendSlice(gpa, "=");
+                    try buf.appendSlice(gpa, std.fmt.bufPrint(&tmp, "{d}", .{entry.value_ptr.*}) catch unreachable);
                 }
-                return buf.toOwnedSlice(gpa) catch return "[]";
+                return try buf.toOwnedSlice(gpa);
             }
         }.string,
         .typeName = struct {
@@ -54,7 +79,7 @@ const strToI64Vtable = strToIntVtableGen(i64);
 const strToU32Vtable = strToIntVtableGen(u32);
 const strToU64Vtable = strToIntVtableGen(u64);
 
-pub fn stringToIntValue(comptime T: type, p: *std.StringHashMapUnmanaged(T)) Value {
+pub fn stringToIntValue(comptime T: type, state: *StringToIntState(T)) Value {
     const vt: *const Value.VTable = switch (T) {
         i32 => &strToI32Vtable,
         i64 => &strToI64Vtable,
@@ -62,35 +87,71 @@ pub fn stringToIntValue(comptime T: type, p: *std.StringHashMapUnmanaged(T)) Val
         u64 => &strToU64Vtable,
         else => @compileError("Unsupported stringToInt type: " ++ @typeName(T)),
     };
-    return .{ .ptr = @ptrCast(@alignCast(p)), .vtable = vt };
+    return .{ .ptr = @ptrCast(@alignCast(state)), .vtable = vt };
 }
 
 // ─── String → String ───
 
+/// Wrapper struct to track changed state for StringToString map values.
+/// First Set replaces defaults; subsequent Sets merge.
+pub const StringToStringState = struct {
+    value: *std.StringHashMapUnmanaged([]const u8),
+    gpa: std.mem.Allocator,
+    changed: bool = false,
+};
+
 const strToStrVtable = Value.VTable{
     .set = struct {
         fn set(ptr: *anyopaque, v: []const u8) !void {
-            const map: *std.StringHashMapUnmanaged([]const u8) = @ptrCast(@alignCast(ptr));
-            const eq = std.mem.indexOfScalar(u8, v, '=') orelse return error.ExpectedKeyValue;
-            const key = v[0..eq];
-            const val = v[eq + 1 ..];
-            try map.put(std.heap.page_allocator, key, std.heap.page_allocator.dupe(u8, val) catch return);
+            const state: *StringToStringState = @ptrCast(@alignCast(ptr));
+            const map = state.value;
+            const gpa = state.gpa;
+            // Support comma-separated key=value pairs: "a=1,b=2"
+            var it = std.mem.splitScalar(u8, v, ',');
+            while (it.next()) |pair| {
+                const trimmed = std.mem.trim(u8, pair, " \t");
+                if (trimmed.len == 0) continue;
+                const eq = std.mem.indexOfScalar(u8, trimmed, '=') orelse return error.ExpectedKeyValue;
+                const key = try gpa.dupe(u8, trimmed[0..eq]);
+                const val = try gpa.dupe(u8, trimmed[eq + 1 ..]);
+                if (!state.changed) {
+                    // First Set: clear defaults before adding
+                    // Free old key/value strings
+                    var old_it = map.iterator();
+                    while (old_it.next()) |entry| {
+                        gpa.free(entry.key_ptr.*);
+                        gpa.free(entry.value_ptr.*);
+                    }
+                    map.clearRetainingCapacity();
+                    state.changed = true;
+                }
+                // If key already exists, free old value
+                if (map.getEntry(key)) |entry| {
+                    gpa.free(entry.value_ptr.*);
+                    entry.value_ptr.* = val;
+                    gpa.free(key); // key already in map, free duplicate
+                } else {
+                    try map.put(gpa, key, val);
+                }
+            }
+            if (!state.changed) state.changed = true;
         }
     }.set,
     .string = struct {
-        fn string(ptr: *anyopaque, gpa: std.mem.Allocator) []const u8 {
-            const map: *std.StringHashMapUnmanaged([]const u8) = @ptrCast(@alignCast(ptr));
+        fn string(ptr: *anyopaque, gpa: std.mem.Allocator) anyerror![]const u8 {
+            const state: *StringToStringState = @ptrCast(@alignCast(ptr));
+            const map = state.value;
             var buf: std.ArrayListUnmanaged(u8) = .empty;
             var it = map.iterator();
             var first = true;
             while (it.next()) |entry| {
-                if (!first) buf.appendSlice(gpa, ", ") catch break;
+                if (!first) try buf.appendSlice(gpa, ", ");
                 first = false;
-                buf.appendSlice(gpa, entry.key_ptr.*) catch break;
-                buf.appendSlice(gpa, "=") catch break;
-                buf.appendSlice(gpa, entry.value_ptr.*) catch break;
+                try buf.appendSlice(gpa, entry.key_ptr.*);
+                try buf.appendSlice(gpa, "=");
+                try buf.appendSlice(gpa, entry.value_ptr.*);
             }
-            return buf.toOwnedSlice(gpa) catch return "{}";
+            return try buf.toOwnedSlice(gpa);
         }
     }.string,
     .typeName = struct {
@@ -106,6 +167,6 @@ const strToStrVtable = Value.VTable{
     }.di,
 };
 
-pub fn stringToStringValue(p: *std.StringHashMapUnmanaged([]const u8)) Value {
-    return .{ .ptr = @ptrCast(@alignCast(p)), .vtable = &strToStrVtable };
+pub fn stringToStringValue(state: *StringToStringState) Value {
+    return .{ .ptr = @ptrCast(@alignCast(state)), .vtable = &strToStrVtable };
 }
