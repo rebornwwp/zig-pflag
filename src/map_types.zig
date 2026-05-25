@@ -11,7 +11,7 @@ const Value = pflag.Value;
 pub fn StringToIntState(comptime T: type) type {
     return struct {
         value: *std.StringHashMapUnmanaged(T),
-        gpa: std.mem.Allocator = std.heap.page_allocator,
+        gpa: std.mem.Allocator,
         changed: bool = false,
     };
 }

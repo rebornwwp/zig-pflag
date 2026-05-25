@@ -23,8 +23,10 @@ const stringVtable = Value.VTable{
     }.tn,
     .deinit = struct {
         fn di(ptr: *anyopaque, gpa: std.mem.Allocator) void {
-            _ = ptr;
-            _ = gpa;
+            const state: *StringState = @ptrCast(@alignCast(ptr));
+            if (state.allocated) {
+                gpa.free(state.value.*);
+            }
         }
     }.di,
 };

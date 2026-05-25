@@ -1370,7 +1370,6 @@ test "StringStateVar copies input on set" {
     var state = pflag.StringState{ .value = &name, .gpa = testing.allocator };
     try fs.stringStateVar(&state, "name", "", "");
     try fs.parse(&.{"--name=copied"});
-    defer testing.allocator.free(name);
     try testing.expectEqualStrings("copied", name);
 }
 
