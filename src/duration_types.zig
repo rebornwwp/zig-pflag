@@ -23,13 +23,32 @@ fn durationSetFn(ptr: *anyopaque, v: []const u8) !void {
     const p: *i64 = @ptrCast(@alignCast(ptr));
     p.* = try parseDuration(v);
 }
-fn durationStrFn(ptr: *anyopaque, gpa: std.mem.Allocator) []const u8 {
+fn durationStrFn(ptr: *anyopaque, gpa: std.mem.Allocator) anyerror![]const u8 {
     const p: *i64 = @ptrCast(@alignCast(ptr));
-    return std.fmt.allocPrint(gpa, "{d}s", .{@divFloor(p.*, std.time.ns_per_s)}) catch "?";
+    return formatDuration(p.*, gpa);
 }
 
 pub fn parseDuration(s: []const u8) !i64 {
     if (s.len < 2) return error.InvalidDuration;
+
+    // Check for multi-character units first (ms, us, ns)
+    if (s.len >= 3) {
+        const last2 = s[s.len - 2 ..];
+        if (std.mem.eql(u8, last2, "ms")) {
+            const val = try std.fmt.parseInt(i64, s[0 .. s.len - 2], 10);
+            return val * std.time.ns_per_ms;
+        }
+        if (std.mem.eql(u8, last2, "us")) {
+            const val = try std.fmt.parseInt(i64, s[0 .. s.len - 2], 10);
+            return val * std.time.ns_per_us;
+        }
+        if (std.mem.eql(u8, last2, "ns")) {
+            const val = try std.fmt.parseInt(i64, s[0 .. s.len - 2], 10);
+            return val;
+        }
+    }
+
+    // Single-character units
     const val_str = s[0 .. s.len - 1];
     const unit = s[s.len - 1];
     const val = try std.fmt.parseInt(i64, val_str, 10);
@@ -43,10 +62,13 @@ pub fn parseDuration(s: []const u8) !i64 {
 }
 
 pub fn formatDuration(ns: i64, gpa: std.mem.Allocator) ![]const u8 {
-    if (ns % std.time.ns_per_day == 0) return std.fmt.allocPrint(gpa, "{d}d", .{@divFloor(ns, std.time.ns_per_day)});
-    if (ns % std.time.ns_per_hour == 0) return std.fmt.allocPrint(gpa, "{d}h", .{@divFloor(ns, std.time.ns_per_hour)});
-    if (ns % std.time.ns_per_min == 0) return std.fmt.allocPrint(gpa, "{d}m", .{@divFloor(ns, std.time.ns_per_min)});
-    return std.fmt.allocPrint(gpa, "{d}s", .{@divFloor(ns, std.time.ns_per_s)});
+    if (@rem(ns, std.time.ns_per_day) == 0) return std.fmt.allocPrint(gpa, "{d}d", .{@divFloor(ns, std.time.ns_per_day)});
+    if (@rem(ns, std.time.ns_per_hour) == 0) return std.fmt.allocPrint(gpa, "{d}h", .{@divFloor(ns, std.time.ns_per_hour)});
+    if (@rem(ns, std.time.ns_per_min) == 0) return std.fmt.allocPrint(gpa, "{d}m", .{@divFloor(ns, std.time.ns_per_min)});
+    if (@rem(ns, std.time.ns_per_s) == 0) return std.fmt.allocPrint(gpa, "{d}s", .{@divFloor(ns, std.time.ns_per_s)});
+    if (@rem(ns, std.time.ns_per_ms) == 0) return std.fmt.allocPrint(gpa, "{d}ms", .{@divFloor(ns, std.time.ns_per_ms)});
+    if (@rem(ns, std.time.ns_per_us) == 0) return std.fmt.allocPrint(gpa, "{d}us", .{@divFloor(ns, std.time.ns_per_us)});
+    return std.fmt.allocPrint(gpa, "{d}ns", .{ns});
 }
 
 pub fn durationValue(val: i64, p: *i64) Value {

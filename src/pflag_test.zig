@@ -250,9 +250,10 @@ test "GetString retrieves string flag value" {
     var name: []const u8 = "";
     try fs.stringVar(&name, "name", "", "");
     try fs.parse(&.{"--name=hello"});
-    try testing.expectEqualStrings("hello", try fs.getString("name"));
+    const got = try fs.getString("name");
+    defer testing.allocator.free(got);
+    try testing.expectEqualStrings("hello", got);
 }
-
 // ── Lookup / Set ──
 
 test "Lookup finds defined flag" {
@@ -564,6 +565,17 @@ test "CountVar default value" {
     try testing.expectEqual(@as(i32, 11), c);
 }
 
+test "CountVar explicit value assigns not accumulates" {
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    var c: i32 = 10;
+    try fs.countVar(&c, "count", 10, "");
+    try fs.parse(&.{"--count=5"});
+
+    // Should be 5 (assigned), not 15 (accumulated)
+    try testing.expectEqual(@as(i32, 5), c);
+}
+
 // ── Duration flag ──
 
 test "DurationVar parses seconds" {
@@ -606,13 +618,48 @@ test "DurationVar parses days" {
     try testing.expectEqual(std.time.ns_per_day, d);
 }
 
+test "DurationVar parses milliseconds" {
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    var d: i64 = 0;
+    try fs.durationVar(&d, "timeout", 0, "");
+    try fs.parse(&.{"--timeout=500ms"});
+
+    try testing.expectEqual(500 * std.time.ns_per_ms, d);
+}
+
+test "DurationVar parses microseconds" {
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    var d: i64 = 0;
+    try fs.durationVar(&d, "timeout", 0, "");
+    try fs.parse(&.{"--timeout=100us"});
+
+    try testing.expectEqual(100 * std.time.ns_per_us, d);
+}
+
+test "DurationVar parses nanoseconds" {
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    var d: i64 = 0;
+    try fs.durationVar(&d, "timeout", 0, "");
+    try fs.parse(&.{"--timeout=200ns"});
+
+    try testing.expectEqual(@as(i64, 200), d);
+}
+
 // ── String Slice ──
 
 test "StringSlice accumulates values" {
     var fs = newTestFlagSet();
     defer fs.deinit();
     var slice: std.ArrayListUnmanaged([]const u8) = .empty;
-    try fs.stringSliceVar(&slice, "tag", &.{}, "");
+    defer {
+        for (slice.items) |s| testing.allocator.free(s);
+        slice.deinit(testing.allocator);
+    }
+    var state = pflag.StringSliceState{ .value = &slice, .gpa = testing.allocator };
+    try fs.stringSliceVar(&state, "tag", &.{}, "");
     try fs.parse(&.{ "--tag=a", "--tag=b", "--tag=c" });
 
     try testing.expectEqual(@as(usize, 3), slice.items.len);
@@ -625,23 +672,51 @@ test "StringSlice with shorthand" {
     var fs = newTestFlagSet();
     defer fs.deinit();
     var slice: std.ArrayListUnmanaged([]const u8) = .empty;
+    defer {
+        for (slice.items) |s| testing.allocator.free(s);
+        slice.deinit(testing.allocator);
+    }
+    var state = pflag.StringSliceState{ .value = &slice, .gpa = testing.allocator };
     fs.error_handling = .continue_on_error;
-    try fs.stringSliceVarP(&slice, "tag", "t", &.{}, "");
+    try fs.stringSliceVarP(&state, "tag", "t", &.{}, "");
     try fs.parse(&.{ "-t", "x", "-t", "y" });
 
     try testing.expectEqual(@as(usize, 2), slice.items.len);
 }
 
-test "StringSlice with default values" {
+test "StringSlice first Set replaces defaults" {
     var fs = newTestFlagSet();
     defer fs.deinit();
     var slice: std.ArrayListUnmanaged([]const u8) = .empty;
-    defer slice.deinit(testing.allocator);
-    slice.appendSlice(testing.allocator, &.{ "alpha", "beta" }) catch {};
-    try fs.stringSliceVar(&slice, "tag", &.{}, "");
+    defer {
+        for (slice.items) |s| testing.allocator.free(s);
+        slice.deinit(testing.allocator);
+    }
+    var state = pflag.StringSliceState{ .value = &slice, .gpa = testing.allocator };
+    try fs.stringSliceVar(&state, "tag", &.{ "default1", "default2" }, "");
+    // Before parse: defaults are populated
+    try testing.expectEqual(@as(usize, 2), slice.items.len);
+    // After parse: first Set replaces defaults
     try fs.parse(&.{"--tag=gamma"});
+    try testing.expectEqual(@as(usize, 1), slice.items.len);
+    try testing.expectEqualStrings("gamma", slice.items[0]);
+}
 
+test "StringSlice supports CSV format" {
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    var slice: std.ArrayListUnmanaged([]const u8) = .empty;
+    defer {
+        for (slice.items) |s| testing.allocator.free(s);
+        slice.deinit(testing.allocator);
+    }
+    var state = pflag.StringSliceState{ .value = &slice, .gpa = testing.allocator };
+    try fs.stringSliceVar(&state, "tag", &.{}, "");
+    try fs.parse(&.{"--tag=a,b,c"});
     try testing.expectEqual(@as(usize, 3), slice.items.len);
+    try testing.expectEqualStrings("a", slice.items[0]);
+    try testing.expectEqualStrings("b", slice.items[1]);
+    try testing.expectEqualStrings("c", slice.items[2]);
 }
 
 // ── Int Slice ──
@@ -650,7 +725,9 @@ test "IntSlice accumulates values" {
     var fs = newTestFlagSet();
     defer fs.deinit();
     var slice: std.ArrayListUnmanaged(i32) = .empty;
-    try fs.intSliceVar(i32, &slice, "port", &.{}, "");
+    defer slice.deinit(testing.allocator);
+    var state = pflag.SliceState(i32){ .value = &slice, .gpa = testing.allocator };
+    try fs.intSliceVar(i32, &state, "port", &.{}, "");
     try fs.parse(&.{ "--port=80", "--port=443", "--port=8080" });
 
     try testing.expectEqual(@as(usize, 3), slice.items.len);
@@ -816,7 +893,9 @@ test "StringToIntVar maps key=value" {
     defer fs.deinit();
     fs.error_handling = .continue_on_error;
     var map: std.StringHashMapUnmanaged(i32) = .empty;
-    try fs.stringToIntVar(i32, &map, "headers", 0, "header map");
+    defer map.deinit(testing.allocator);
+    var state = pflag.StringToIntState(i32){ .value = &map, .gpa = testing.allocator };
+    try fs.stringToIntVar(i32, &state, "headers", 0, "header map");
     try fs.parse(&.{ "--headers=a=1", "--headers=b=2", "--headers=c=3" });
 
     try testing.expectEqual(@as(i32, 1), map.get("a").?);
@@ -829,7 +908,9 @@ test "StringToIntVar rejects non-key=value" {
     defer fs.deinit();
     fs.error_handling = .continue_on_error;
     var map: std.StringHashMapUnmanaged(i32) = .empty;
-    try fs.stringToIntVar(i32, &map, "headers", 0, "");
+    defer map.deinit(testing.allocator);
+    var state = pflag.StringToIntState(i32){ .value = &map, .gpa = testing.allocator };
+    try fs.stringToIntVar(i32, &state, "headers", 0, "");
     try testing.expectError(error.ExpectedKeyValue, fs.parse(&.{"--headers=badval"}));
 }
 
@@ -840,7 +921,16 @@ test "StringToStringVar maps key=value" {
     defer fs.deinit();
     fs.error_handling = .continue_on_error;
     var map: std.StringHashMapUnmanaged([]const u8) = .empty;
-    try fs.stringToStringVar(&map, "labels", "", "");
+    defer {
+        var it = map.iterator();
+        while (it.next()) |e| {
+            testing.allocator.free(e.key_ptr.*);
+            testing.allocator.free(e.value_ptr.*);
+        }
+        map.deinit(testing.allocator);
+    }
+    var state = pflag.StringToStringState{ .value = &map, .gpa = testing.allocator };
+    try fs.stringToStringVar(&state, "labels", "", "");
     try fs.parse(&.{ "--labels=env=prod", "--labels=region=us-east" });
 
     try testing.expectEqualStrings("prod", map.get("env").?);
@@ -915,7 +1005,9 @@ test "UintSlice accumulates values" {
     var fs = newTestFlagSet();
     defer fs.deinit();
     var slice: std.ArrayListUnmanaged(u32) = .empty;
-    try fs.uintSliceVar(u32, &slice, "port", &.{}, "");
+    defer slice.deinit(testing.allocator);
+    var state = pflag.SliceState(u32){ .value = &slice, .gpa = testing.allocator };
+    try fs.uintSliceVar(u32, &state, "port", &.{}, "");
     try fs.parse(&.{ "--port=80", "--port=443", "--port=8080" });
     try testing.expectEqual(@as(usize, 3), slice.items.len);
     try testing.expectEqual(@as(u32, 80), slice.items[0]);
@@ -928,7 +1020,9 @@ test "BoolSlice accumulates values" {
     var fs = newTestFlagSet();
     defer fs.deinit();
     var slice: std.ArrayListUnmanaged(bool) = .empty;
-    try fs.boolSliceVar(&slice, "flag", &.{}, "");
+    defer slice.deinit(testing.allocator);
+    var state = pflag.SliceState(bool){ .value = &slice, .gpa = testing.allocator };
+    try fs.boolSliceVar(&state, "flag", &.{}, "");
     try fs.parse(&.{ "--flag=true", "--flag=false", "--flag" });
     try testing.expectEqual(@as(usize, 3), slice.items.len);
     try testing.expect(slice.items[0]);
@@ -941,7 +1035,9 @@ test "BoolSlice with shorthand" {
     defer fs.deinit();
     fs.error_handling = .continue_on_error;
     var slice: std.ArrayListUnmanaged(bool) = .empty;
-    try fs.boolSliceVarP(&slice, "flag", "f", &.{}, "");
+    defer slice.deinit(testing.allocator);
+    var state = pflag.SliceState(bool){ .value = &slice, .gpa = testing.allocator };
+    try fs.boolSliceVarP(&state, "flag", "f", &.{}, "");
     try fs.parse(&.{ "-f", "-f", "-f" });
     try testing.expectEqual(@as(usize, 3), slice.items.len);
 }
@@ -952,7 +1048,9 @@ test "FloatSlice accumulates values" {
     var fs = newTestFlagSet();
     defer fs.deinit();
     var slice: std.ArrayListUnmanaged(f64) = .empty;
-    try fs.floatSliceVar(f64, &slice, "rate", &.{}, "");
+    defer slice.deinit(testing.allocator);
+    var state = pflag.SliceState(f64){ .value = &slice, .gpa = testing.allocator };
+    try fs.floatSliceVar(f64, &state, "rate", &.{}, "");
     try fs.parse(&.{ "--rate=1.5", "--rate=2.5", "--rate=3.14" });
     try testing.expectEqual(@as(usize, 3), slice.items.len);
     try testing.expectApproxEqRel(1.5, slice.items[0], @as(f64, @floatCast(0.0001)));
@@ -963,7 +1061,9 @@ test "FloatSlice f32 type" {
     var fs = newTestFlagSet();
     defer fs.deinit();
     var slice: std.ArrayListUnmanaged(f32) = .empty;
-    try fs.floatSliceVar(f32, &slice, "val", &.{}, "");
+    defer slice.deinit(testing.allocator);
+    var state = pflag.SliceState(f32){ .value = &slice, .gpa = testing.allocator };
+    try fs.floatSliceVar(f32, &state, "val", &.{}, "");
     try fs.parse(&.{ "--val=0.5", "--val=1.0" });
     try testing.expectEqual(@as(usize, 2), slice.items.len);
 }
@@ -974,8 +1074,13 @@ test "StringArray accumulates values" {
     var fs = newTestFlagSet();
     defer fs.deinit();
     var slice: std.ArrayListUnmanaged([]const u8) = .empty;
-    try fs.stringArrayVar(&slice, "tag", &.{}, "");
+    var state = pflag.StringArrayState{ .value = &slice, .gpa = testing.allocator };
+    try fs.stringArrayVar(&state, "tag", &.{}, "");
     try fs.parse(&.{ "--tag=a", "--tag=b", "--tag=c" });
+    defer {
+        for (slice.items) |s| testing.allocator.free(s);
+        slice.deinit(testing.allocator);
+    }
     try testing.expectEqual(@as(usize, 3), slice.items.len);
     try testing.expectEqualStrings("a", slice.items[0]);
 }
@@ -985,9 +1090,27 @@ test "StringArray with default values" {
     defer fs.deinit();
     var slice: std.ArrayListUnmanaged([]const u8) = .empty;
     defer slice.deinit(testing.allocator);
-    slice.appendSlice(testing.allocator, &.{ "alpha", "beta" }) catch {};
-    try fs.stringArrayVar(&slice, "tag", &.{}, "");
+    var state = pflag.StringArrayState{ .value = &slice, .gpa = testing.allocator };
+    try fs.stringArrayVar(&state, "tag", &.{ "alpha", "beta" }, "");
     try testing.expectEqual(@as(usize, 2), slice.items.len);
+}
+
+test "StringArray first Set replaces defaults" {
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    var slice: std.ArrayListUnmanaged([]const u8) = .empty;
+    var state = pflag.StringArrayState{ .value = &slice, .gpa = testing.allocator };
+    try fs.stringArrayVar(&state, "tag", &.{ "d1", "d2" }, "");
+    // Before parse: defaults are populated
+    try testing.expectEqual(@as(usize, 2), slice.items.len);
+    // After parse: first Set replaces defaults
+    try fs.parse(&.{"--tag=new"});
+    defer {
+        for (slice.items) |s| testing.allocator.free(s);
+        slice.deinit(testing.allocator);
+    }
+    try testing.expectEqual(@as(usize, 1), slice.items.len);
+    try testing.expectEqualStrings("new", slice.items[0]);
 }
 
 // ── Additional coverage ──
@@ -1010,9 +1133,10 @@ test "ParseRepeated works" {
     try fs.boolVar(&a, "a", false, "");
     try fs.parse(&.{"--a"});
     try testing.expect(a);
-    // Parse again with different args
+    // Parse again with empty args - args are reset, but flag value preserved
     try fs.parse(&.{});
     try testing.expect(a); // value preserved
+    try testing.expectEqual(@as(usize, 0), fs.nArg()); // args reset
 }
 
 test "SetOutput changes writer" {
@@ -1051,7 +1175,9 @@ test "StringToIntVar supports i64" {
     defer fs.deinit();
     fs.error_handling = .continue_on_error;
     var map: std.StringHashMapUnmanaged(i64) = .empty;
-    try fs.stringToIntVar(i64, &map, "headers", 0, "header map (i64)");
+    defer map.deinit(testing.allocator);
+    var state = pflag.StringToIntState(i64){ .value = &map, .gpa = testing.allocator };
+    try fs.stringToIntVar(i64, &state, "headers", 0, "header map (i64)");
     try fs.parse(&.{"--headers=x=9223372036854775807"});
     try testing.expectEqual(@as(i64, 9223372036854775807), map.get("x").?);
 }
@@ -1061,8 +1187,213 @@ test "StringToIntVar supports u32" {
     defer fs.deinit();
     fs.error_handling = .continue_on_error;
     var map: std.StringHashMapUnmanaged(u32) = .empty;
-    try fs.stringToIntVar(u32, &map, "ports", 0, "port map");
+    defer map.deinit(testing.allocator);
+    var state = pflag.StringToIntState(u32){ .value = &map, .gpa = testing.allocator };
+    try fs.stringToIntVar(u32, &state, "ports", 0, "port map");
     try fs.parse(&.{ "--ports=web=80", "--ports=ssl=443" });
     try testing.expectEqual(@as(u32, 80), map.get("web").?);
     try testing.expectEqual(@as(u32, 443), map.get("ssl").?);
+}
+
+test "StringToIntVar first Set replaces defaults" {
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    fs.error_handling = .continue_on_error;
+    var map: std.StringHashMapUnmanaged(i32) = .empty;
+    // Pre-populate with defaults
+    map.put(testing.allocator, "old1", 100) catch {};
+    map.put(testing.allocator, "old2", 200) catch {};
+    defer map.deinit(testing.allocator);
+    var state = pflag.StringToIntState(i32){ .value = &map, .gpa = testing.allocator };
+    try fs.stringToIntVar(i32, &state, "headers", 0, "");
+    try testing.expectEqual(@as(u32, 2), map.count());
+    // First Set should replace defaults
+    try fs.parse(&.{"--headers=x=10"});
+    try testing.expectEqual(@as(u32, 1), map.count());
+    try testing.expectEqual(@as(i32, 10), map.get("x").?);
+    try testing.expect(map.get("old1") == null);
+}
+
+test "StringToIntVar supports comma-separated pairs" {
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    fs.error_handling = .continue_on_error;
+    var map: std.StringHashMapUnmanaged(i32) = .empty;
+    defer map.deinit(testing.allocator);
+    var state = pflag.StringToIntState(i32){ .value = &map, .gpa = testing.allocator };
+    try fs.stringToIntVar(i32, &state, "headers", 0, "");
+    try fs.parse(&.{"--headers=a=1,b=2,c=3"});
+    try testing.expectEqual(@as(u32, 3), map.count());
+    try testing.expectEqual(@as(i32, 1), map.get("a").?);
+    try testing.expectEqual(@as(i32, 2), map.get("b").?);
+    try testing.expectEqual(@as(i32, 3), map.get("c").?);
+}
+
+// ── Duplicate shorthand rejection ──
+
+test "Duplicate shorthand is rejected" {
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    var a: bool = false;
+    var b: bool = false;
+    try fs.boolVarP(&a, "alpha", "a", false, "");
+    try testing.expectError(error.ShorthandRedefined, fs.boolVarP(&b, "beta", "a", false, ""));
+}
+
+// ── Re-parse resets args ──
+
+test "Parse resets args on re-parse" {
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    try fs.parse(&.{ "arg1", "arg2" });
+    try testing.expectEqual(@as(usize, 2), fs.nArg());
+    try fs.parse(&.{"arg3"});
+    try testing.expectEqual(@as(usize, 1), fs.nArg());
+    try testing.expectEqualStrings("arg3", fs.arg(0));
+}
+
+// ── argsLenAtDash ──
+
+test "ArgsLenAtDash returns correct value" {
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    var a: bool = false;
+    try fs.boolVar(&a, "a", false, "");
+    try fs.parse(&.{ "--a", "--", "extra" });
+    try testing.expectEqual(@as(isize, 0), fs.argsLenAtDash());
+}
+
+test "ArgsLenAtDash returns -1 without dash-dash" {
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    try fs.parse(&.{"arg1"});
+    try testing.expectEqual(@as(isize, -1), fs.argsLenAtDash());
+}
+
+// ── Type-safe getters ──
+
+test "GetInt returns TypeMismatch for wrong type" {
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    var b: bool = false;
+    try fs.boolVar(&b, "flag", false, "");
+    try testing.expectError(error.TypeMismatch, fs.getInt(i32, "flag"));
+}
+
+test "GetBool returns TypeMismatch for non-bool" {
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    var n: i32 = 0;
+    try fs.intVar(i32, &n, "num", 0, "");
+    try testing.expectError(error.TypeMismatch, fs.getBool("num"));
+}
+
+// ── Go-compatible bool forms ──
+
+test "BoolVar accepts Go-compatible forms" {
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    var a: bool = false;
+    var b: bool = true;
+    var c: bool = false;
+    var d: bool = true;
+    try fs.boolVar(&a, "a", false, "");
+    try fs.boolVar(&b, "b", true, "");
+    try fs.boolVar(&c, "c", false, "");
+    try fs.boolVar(&d, "d", true, "");
+    try fs.parse(&.{ "--a=TRUE", "--b=FALSE", "--c=True", "--d=False" });
+    try testing.expect(a);
+    try testing.expect(!b);
+    try testing.expect(c);
+    try testing.expect(!d);
+}
+
+test "BoolVar accepts T and F shorthand forms" {
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    var a: bool = false;
+    var b: bool = true;
+    try fs.boolVar(&a, "a", false, "");
+    try fs.boolVar(&b, "b", true, "");
+    try fs.parse(&.{ "--a=t", "--b=f" });
+    try testing.expect(a);
+    try testing.expect(!b);
+}
+
+// ── StringToString CSV ──
+
+test "StringToStringVar supports CSV format" {
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    fs.error_handling = .continue_on_error;
+    var map: std.StringHashMapUnmanaged([]const u8) = .empty;
+    defer {
+        var it = map.iterator();
+        while (it.next()) |e| {
+            testing.allocator.free(e.key_ptr.*);
+            testing.allocator.free(e.value_ptr.*);
+        }
+        map.deinit(testing.allocator);
+    }
+    var state = pflag.StringToStringState{ .value = &map, .gpa = testing.allocator };
+    try fs.stringToStringVar(&state, "labels", "", "");
+    try fs.parse(&.{"--labels=a=1,b=2,c=3"});
+    try testing.expectEqual(@as(u32, 3), map.count());
+    try testing.expectEqualStrings("1", map.get("a").?);
+    try testing.expectEqualStrings("2", map.get("b").?);
+    try testing.expectEqualStrings("3", map.get("c").?);
+}
+
+// ── addFlagSet copies annotations ──
+
+test "AddFlagSet copies annotations" {
+    var fs1 = FlagSet.init(testing.allocator, "set1");
+    defer fs1.deinit();
+    var fs2 = FlagSet.init(testing.allocator, "set2");
+    defer fs2.deinit();
+    var a: bool = false;
+    try fs2.boolVar(&a, "flag1", false, "");
+    const values = [_][]const u8{"v1"};
+    try fs2.setAnnotation("flag1", "mykey", &values);
+    try fs1.addFlagSet(&fs2);
+    const ann = fs1.getAnnotation("flag1", "mykey");
+    try testing.expect(ann != null);
+    try testing.expectEqual(@as(usize, 1), ann.?.len);
+}
+
+// ── StringStateVar copy-on-set ──
+
+test "StringStateVar copies input on set" {
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    var name: []const u8 = "";
+    var state = pflag.StringState{ .value = &name, .gpa = testing.allocator };
+    try fs.stringStateVar(&state, "name", "", "");
+    try fs.parse(&.{"--name=copied"});
+    try testing.expectEqualStrings("copied", name);
+}
+
+// ── FlagUsagesWrapped ──
+
+test "FlagUsagesWrapped respects column width" {
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    var val: bool = false;
+    try fs.boolVarP(&val, "verbose", "v", false, "enable verbose output for debugging purposes");
+    const text = fs.flagUsagesWrapped(40);
+    defer testing.allocator.free(text);
+    try testing.expect(text.len > 0);
+}
+
+// ── CommandLine singleton ──
+
+test "CommandLine basic bool flag" {
+    pflag.initCommandLine(testing.allocator);
+    defer pflag.deinitCommandLine();
+    var debug: bool = false;
+    try pflag.boolCL(&debug, "debug", false, "enable debug");
+    try pflag.parseCL(&.{"--debug"});
+    try testing.expect(debug);
+    try testing.expectEqual(@as(usize, 1), pflag.nFlagCL());
+    try testing.expectEqual(@as(usize, 0), pflag.nArgCL());
 }

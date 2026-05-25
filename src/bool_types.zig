@@ -12,15 +12,32 @@ const boolVtable = Value.VTable{
 };
 fn boolSetFn(ptr: *anyopaque, v: []const u8) !void {
     const p: *bool = @ptrCast(@alignCast(ptr));
-    if (std.mem.eql(u8, v, "true") or std.mem.eql(u8, v, "1") or v.len == 0) {
-        p.* = true;
-    } else if (std.mem.eql(u8, v, "false") or std.mem.eql(u8, v, "0")) {
-        p.* = false;
-    } else return error.InvalidBoolValue;
+    p.* = try parseBool(v);
 }
-fn boolStrFn(ptr: *anyopaque, gpa: std.mem.Allocator) []const u8 {
+
+/// Go-compatible bool parsing: accepts true/false, TRUE/FALSE, True/False,
+/// T/F, t/f, 1/0, and empty string (treated as true).
+pub fn parseBool(v: []const u8) !bool {
+    if (v.len == 0) return true;
+    if (equalsIgnoreCase(v, "true") or equalsIgnoreCase(v, "t") or std.mem.eql(u8, v, "1")) return true;
+    if (equalsIgnoreCase(v, "false") or equalsIgnoreCase(v, "f") or std.mem.eql(u8, v, "0")) return false;
+    return error.InvalidBoolValue;
+}
+
+fn equalsIgnoreCase(a: []const u8, b: []const u8) bool {
+    if (a.len != b.len) return false;
+    for (a, b) |ca, cb| {
+        if (toLower(ca) != toLower(cb)) return false;
+    }
+    return true;
+}
+
+fn toLower(c: u8) u8 {
+    return if (c >= 'A' and c <= 'Z') c + 32 else c;
+}
+fn boolStrFn(ptr: *anyopaque, gpa: std.mem.Allocator) anyerror![]const u8 {
     const val = (@as(*bool, @ptrCast(@alignCast(ptr)))).*;
-    return gpa.dupe(u8, if (val) "true" else "false") catch "true";
+    return gpa.dupe(u8, if (val) "true" else "false");
 }
 fn boolTypeNameFn() []const u8 {
     return "bool";

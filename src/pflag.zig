@@ -29,7 +29,7 @@ pub const Value = struct {
 
     pub const VTable = struct {
         set: *const fn (ptr: *anyopaque, val: []const u8) anyerror!void,
-        string: *const fn (ptr: *anyopaque, gpa: std.mem.Allocator) []const u8,
+        string: *const fn (ptr: *anyopaque, gpa: std.mem.Allocator) anyerror![]const u8,
         typeName: *const fn () []const u8,
         deinit: *const fn (ptr: *anyopaque, gpa: std.mem.Allocator) void,
     };
@@ -37,7 +37,7 @@ pub const Value = struct {
     pub fn set(self: Value, val: []const u8) anyerror!void {
         return self.vtable.set(self.ptr, val);
     }
-    pub fn string(self: Value, gpa: std.mem.Allocator) []const u8 {
+    pub fn string(self: Value, gpa: std.mem.Allocator) anyerror![]const u8 {
         return self.vtable.string(self.ptr, gpa);
     }
     pub fn typeName(self: Value) []const u8 {
@@ -65,18 +65,25 @@ pub const intValue = int_types.intValue;
 pub const uintValue = uint_types.uintValue;
 pub const floatValue = float_types.floatValue;
 pub const stringValue = string_types.stringValue;
+pub const stringStateValue = string_types.stringStateValue;
+pub const StringState = string_types.StringState;
 pub const countValue = count_types.countValue;
 pub const durationValue = duration_types.durationValue;
 pub const parseDuration = duration_types.parseDuration;
 pub const formatDuration = duration_types.formatDuration;
 pub const stringSliceValue = slice_types.stringSliceValue;
+pub const StringSliceState = slice_types.StringSliceState;
 pub const stringArrayValue = slice_types.stringArrayValue;
+pub const StringArrayState = slice_types.StringArrayState;
 pub const intSliceValue = slice_types.intSliceValue;
 pub const uintSliceValue = slice_types.uintSliceValue;
 pub const boolSliceValue = slice_types.boolSliceValue;
 pub const floatSliceValue = slice_types.floatSliceValue;
+pub const SliceState = slice_types.SliceState;
 pub const stringToIntValue = map_types.stringToIntValue;
+pub const StringToIntState = map_types.StringToIntState;
 pub const stringToStringValue = map_types.stringToStringValue;
+pub const StringToStringState = map_types.StringToStringState;
 
 // ─── Flag ───
 
@@ -122,6 +129,7 @@ pub const FlagSet = struct {
     normalize_name_callback: ?*const fn (*FlagSet, []const u8) []const u8 = null,
     _parse_callback: ?*const fn (*Flag, []const u8) anyerror!void = null,
     _last_error: ParseError = .{ .kind = .help },
+    _shorthand_err_buf: [1]u8 = undefined,
 
     pub fn init(gpa: std.mem.Allocator, name: []const u8) FlagSet {
         return .{ .gpa = gpa, .name = name };
@@ -151,12 +159,17 @@ pub const FlagSet = struct {
         const gpa = self.gpa;
         const nname = self.normalizeFlagName(flag.name);
         if (self.formal.contains(nname)) return error.FlagRedefined;
+        // Validate shorthand before inserting to avoid partial state
+        if (flag.shorthand.len > 1) return error.ShorthandTooLong;
+        if (flag.shorthand.len > 0 and self.shorthands.contains(flag.shorthand[0])) return error.ShorthandRedefined;
         flag.name = nname;
         try self.formal.put(gpa, nname, flag);
+        errdefer _ = self.formal.remove(nname);
         try self.ordered_formal.append(gpa, flag);
+        errdefer _ = self.ordered_formal.pop();
         if (flag.shorthand.len > 0) {
-            if (flag.shorthand.len > 1) return error.ShorthandTooLong;
             try self.shorthands.put(gpa, flag.shorthand[0], flag);
+            errdefer _ = self.shorthands.remove(flag.shorthand[0]);
         }
     }
 
@@ -168,6 +181,11 @@ pub const FlagSet = struct {
                 added.deprecated = flag.deprecated;
                 added.shorthand_deprecated = flag.shorthand_deprecated;
                 added.hidden = flag.hidden;
+                // Copy annotations
+                var ann_it = flag.annotations.iterator();
+                while (ann_it.next()) |entry| {
+                    try added.annotations.put(self.gpa, entry.key_ptr.*, entry.value_ptr.*);
+                }
             }
         }
     }
@@ -175,7 +193,10 @@ pub const FlagSet = struct {
     pub fn varP(self: *FlagSet, value: Value, name: []const u8, shorthand: []const u8, usage: []const u8) !*Flag {
         const gpa = self.gpa;
         const flag = try gpa.create(Flag);
-        flag.* = .{ .name = name, .shorthand = shorthand, .usage = usage, .value = value, .def_value = value.string(gpa) };
+        errdefer gpa.destroy(flag);
+        const def_value = try value.string(gpa);
+        flag.* = .{ .name = name, .shorthand = shorthand, .usage = usage, .value = value, .def_value = def_value };
+        errdefer gpa.free(flag.def_value);
         try self.addFlag(flag);
         return flag;
     }
@@ -216,12 +237,21 @@ pub const FlagSet = struct {
         _ = try self.varP(stringValue(value, p), name, shorthand, usage);
     }
 
+    pub fn stringStateVar(self: *FlagSet, state: *StringState, name: []const u8, value: []const u8, usage: []const u8) !void {
+        try self.stringStateVarP(state, name, "", value, usage);
+    }
+    pub fn stringStateVarP(self: *FlagSet, state: *StringState, name: []const u8, shorthand: []const u8, value: []const u8, usage: []const u8) !void {
+        state.value.* = try state.gpa.dupe(u8, value);
+        state.allocated = true;
+        _ = try self.varP(stringStateValue(state), name, shorthand, usage);
+    }
+
     pub fn countVar(self: *FlagSet, p: *i32, name: []const u8, value: i32, usage: []const u8) !void {
         try self.countVarP(p, name, "", value, usage);
     }
     pub fn countVarP(self: *FlagSet, p: *i32, name: []const u8, shorthand: []const u8, value: i32, usage: []const u8) !void {
         const flag = try self.varP(countValue(value, p), name, shorthand, usage);
-        flag.no_opt_def_val = "1";
+        flag.no_opt_def_val = "+1";
     }
 
     pub fn durationVar(self: *FlagSet, p: *i64, name: []const u8, value: i64, usage: []const u8) !void {
@@ -231,70 +261,75 @@ pub const FlagSet = struct {
         _ = try self.varP(durationValue(value, p), name, shorthand, usage);
     }
 
-    pub fn stringSliceVar(self: *FlagSet, p: *std.ArrayListUnmanaged([]const u8), name: []const u8, value: []const []const u8, usage: []const u8) !void {
-        try self.stringSliceVarP(p, name, "", value, usage);
+    pub fn stringSliceVar(self: *FlagSet, state: *StringSliceState, name: []const u8, value: []const []const u8, usage: []const u8) !void {
+        try self.stringSliceVarP(state, name, "", value, usage);
     }
-    pub fn stringSliceVarP(self: *FlagSet, p: *std.ArrayListUnmanaged([]const u8), name: []const u8, shorthand: []const u8, value: []const []const u8, usage: []const u8) !void {
-        // Caller owns the ArrayList — pre-populate defaults themselves if needed.
-        _ = value;
-        _ = try self.varP(stringSliceValue(p), name, shorthand, usage);
-    }
-
-    pub fn intSliceVar(self: *FlagSet, comptime T: type, p: *std.ArrayListUnmanaged(T), name: []const u8, value: []const T, usage: []const u8) !void {
-        try self.intSliceVarP(T, p, name, "", value, usage);
-    }
-    pub fn intSliceVarP(self: *FlagSet, comptime T: type, p: *std.ArrayListUnmanaged(T), name: []const u8, shorthand: []const u8, value: []const T, usage: []const u8) !void {
-        p.appendSlice(self.gpa, value) catch {};
-        _ = try self.varP(intSliceValue(T, p), name, shorthand, usage);
+    pub fn stringSliceVarP(self: *FlagSet, state: *StringSliceState, name: []const u8, shorthand: []const u8, value: []const []const u8, usage: []const u8) !void {
+        // Pre-populate defaults into the ArrayList if provided
+        if (value.len > 0) {
+            try state.value.appendSlice(self.gpa, value);
+        }
+        _ = try self.varP(stringSliceValue(state), name, shorthand, usage);
     }
 
-    pub fn uintSliceVar(self: *FlagSet, comptime T: type, p: *std.ArrayListUnmanaged(T), name: []const u8, value: []const T, usage: []const u8) !void {
-        try self.uintSliceVarP(T, p, name, "", value, usage);
+    pub fn intSliceVar(self: *FlagSet, comptime T: type, state: *slice_types.SliceState(T), name: []const u8, value: []const T, usage: []const u8) !void {
+        try self.intSliceVarP(T, state, name, "", value, usage);
     }
-    pub fn uintSliceVarP(self: *FlagSet, comptime T: type, p: *std.ArrayListUnmanaged(T), name: []const u8, shorthand: []const u8, value: []const T, usage: []const u8) !void {
-        p.appendSlice(self.gpa, value) catch {};
-        _ = try self.varP(uintSliceValue(T, p), name, shorthand, usage);
+    pub fn intSliceVarP(self: *FlagSet, comptime T: type, state: *slice_types.SliceState(T), name: []const u8, shorthand: []const u8, value: []const T, usage: []const u8) !void {
+        try state.value.appendSlice(self.gpa, value);
+        _ = try self.varP(intSliceValue(T, state), name, shorthand, usage);
     }
 
-    pub fn boolSliceVar(self: *FlagSet, p: *std.ArrayListUnmanaged(bool), name: []const u8, value: []const bool, usage: []const u8) !void {
-        try self.boolSliceVarP(p, name, "", value, usage);
+    pub fn uintSliceVar(self: *FlagSet, comptime T: type, state: *slice_types.SliceState(T), name: []const u8, value: []const T, usage: []const u8) !void {
+        try self.uintSliceVarP(T, state, name, "", value, usage);
     }
-    pub fn boolSliceVarP(self: *FlagSet, p: *std.ArrayListUnmanaged(bool), name: []const u8, shorthand: []const u8, value: []const bool, usage: []const u8) !void {
-        p.appendSlice(self.gpa, value) catch {};
-        const flag = try self.varP(boolSliceValue(p), name, shorthand, usage);
+    pub fn uintSliceVarP(self: *FlagSet, comptime T: type, state: *slice_types.SliceState(T), name: []const u8, shorthand: []const u8, value: []const T, usage: []const u8) !void {
+        try state.value.appendSlice(self.gpa, value);
+        _ = try self.varP(uintSliceValue(T, state), name, shorthand, usage);
+    }
+
+    pub fn boolSliceVar(self: *FlagSet, state: *slice_types.SliceState(bool), name: []const u8, value: []const bool, usage: []const u8) !void {
+        try self.boolSliceVarP(state, name, "", value, usage);
+    }
+    pub fn boolSliceVarP(self: *FlagSet, state: *slice_types.SliceState(bool), name: []const u8, shorthand: []const u8, value: []const bool, usage: []const u8) !void {
+        try state.value.appendSlice(self.gpa, value);
+        const flag = try self.varP(boolSliceValue(state), name, shorthand, usage);
         flag.no_opt_def_val = "true";
     }
 
-    pub fn floatSliceVar(self: *FlagSet, comptime T: type, p: *std.ArrayListUnmanaged(T), name: []const u8, value: []const T, usage: []const u8) !void {
-        try self.floatSliceVarP(T, p, name, "", value, usage);
+    pub fn floatSliceVar(self: *FlagSet, comptime T: type, state: *slice_types.SliceState(T), name: []const u8, value: []const T, usage: []const u8) !void {
+        try self.floatSliceVarP(T, state, name, "", value, usage);
     }
-    pub fn floatSliceVarP(self: *FlagSet, comptime T: type, p: *std.ArrayListUnmanaged(T), name: []const u8, shorthand: []const u8, value: []const T, usage: []const u8) !void {
-        p.appendSlice(self.gpa, value) catch {};
-        _ = try self.varP(floatSliceValue(T, p), name, shorthand, usage);
-    }
-
-    pub fn stringArrayVar(self: *FlagSet, p: *std.ArrayListUnmanaged([]const u8), name: []const u8, value: []const []const u8, usage: []const u8) !void {
-        try self.stringArrayVarP(p, name, "", value, usage);
-    }
-    pub fn stringArrayVarP(self: *FlagSet, p: *std.ArrayListUnmanaged([]const u8), name: []const u8, shorthand: []const u8, value: []const []const u8, usage: []const u8) !void {
-        _ = value;
-        _ = try self.varP(stringArrayValue(p), name, shorthand, usage);
+    pub fn floatSliceVarP(self: *FlagSet, comptime T: type, state: *slice_types.SliceState(T), name: []const u8, shorthand: []const u8, value: []const T, usage: []const u8) !void {
+        try state.value.appendSlice(self.gpa, value);
+        _ = try self.varP(floatSliceValue(T, state), name, shorthand, usage);
     }
 
-    pub fn stringToIntVar(self: *FlagSet, comptime T: type, p: *std.StringHashMapUnmanaged(T), name: []const u8, value: T, usage: []const u8) !void {
-        try self.stringToIntVarP(T, p, name, "", value, usage);
+    pub fn stringArrayVar(self: *FlagSet, state: *StringArrayState, name: []const u8, value: []const []const u8, usage: []const u8) !void {
+        try self.stringArrayVarP(state, name, "", value, usage);
     }
-    pub fn stringToIntVarP(self: *FlagSet, comptime T: type, p: *std.StringHashMapUnmanaged(T), name: []const u8, shorthand: []const u8, value: T, usage: []const u8) !void {
-        _ = value;
-        _ = try self.varP(stringToIntValue(T, p), name, shorthand, usage);
+    pub fn stringArrayVarP(self: *FlagSet, state: *StringArrayState, name: []const u8, shorthand: []const u8, value: []const []const u8, usage: []const u8) !void {
+        // Pre-populate defaults into the ArrayList if provided
+        if (value.len > 0) {
+            try state.value.appendSlice(self.gpa, value);
+        }
+        _ = try self.varP(stringArrayValue(state), name, shorthand, usage);
     }
 
-    pub fn stringToStringVar(self: *FlagSet, p: *std.StringHashMapUnmanaged([]const u8), name: []const u8, value: []const u8, usage: []const u8) !void {
-        try self.stringToStringVarP(p, name, "", value, usage);
+    pub fn stringToIntVar(self: *FlagSet, comptime T: type, state: *StringToIntState(T), name: []const u8, value: T, usage: []const u8) !void {
+        try self.stringToIntVarP(T, state, name, "", value, usage);
     }
-    pub fn stringToStringVarP(self: *FlagSet, p: *std.StringHashMapUnmanaged([]const u8), name: []const u8, shorthand: []const u8, value: []const u8, usage: []const u8) !void {
-        _ = value;
-        _ = try self.varP(stringToStringValue(p), name, shorthand, usage);
+    pub fn stringToIntVarP(self: *FlagSet, comptime T: type, state: *StringToIntState(T), name: []const u8, shorthand: []const u8, value: T, usage: []const u8) !void {
+        _ = value; // TODO: pre-populate map from value if non-empty
+        _ = try self.varP(stringToIntValue(T, state), name, shorthand, usage);
+    }
+
+    pub fn stringToStringVar(self: *FlagSet, state: *StringToStringState, name: []const u8, value: []const u8, usage: []const u8) !void {
+        try self.stringToStringVarP(state, name, "", value, usage);
+    }
+    pub fn stringToStringVarP(self: *FlagSet, state: *StringToStringState, name: []const u8, shorthand: []const u8, value: []const u8, usage: []const u8) !void {
+        _ = value; // TODO: pre-populate map from CSV value if non-empty
+        _ = try self.varP(stringToStringValue(state), name, shorthand, usage);
     }
 
     pub fn lookup(self: *FlagSet, name: []const u8) ?*Flag {
@@ -314,6 +349,7 @@ pub const FlagSet = struct {
         const gpa = self.gpa;
         if (!self.actual.contains(flag.name)) {
             try self.actual.put(gpa, flag.name, flag);
+            errdefer _ = self.actual.remove(flag.name);
             try self.ordered_actual.append(gpa, flag);
         }
         flag.changed = true;
@@ -334,6 +370,9 @@ pub const FlagSet = struct {
     pub fn hasFlags(self: *const FlagSet) bool {
         return self.ordered_formal.items.len > 0;
     }
+    pub fn argsLenAtDash(self: *const FlagSet) isize {
+        return self.args_len_at_dash;
+    }
 
     pub fn visit(self: *const FlagSet, context: anytype, cb: *const fn (@TypeOf(context), *Flag) void) void {
         for (self.ordered_actual.items) |f| cb(context, f);
@@ -344,19 +383,23 @@ pub const FlagSet = struct {
 
     pub fn getBool(self: *FlagSet, name: []const u8) !bool {
         const flag = self.lookup(name) orelse return error.NoSuchFlag;
+        if (!std.mem.eql(u8, flag.value.typeName(), "bool")) return error.TypeMismatch;
         return (@as(*bool, @ptrCast(@alignCast(flag.value.ptr)))).*;
     }
     pub fn getInt(self: *FlagSet, comptime T: type, name: []const u8) !T {
         const flag = self.lookup(name) orelse return error.NoSuchFlag;
+        if (!std.mem.eql(u8, flag.value.typeName(), @typeName(T))) return error.TypeMismatch;
         return (@as(*T, @ptrCast(@alignCast(flag.value.ptr)))).*;
     }
     pub fn getFloat(self: *FlagSet, comptime T: type, name: []const u8) !T {
         const flag = self.lookup(name) orelse return error.NoSuchFlag;
+        if (!std.mem.eql(u8, flag.value.typeName(), @typeName(T))) return error.TypeMismatch;
         return (@as(*T, @ptrCast(@alignCast(flag.value.ptr)))).*;
     }
     pub fn getString(self: *FlagSet, name: []const u8) ![]const u8 {
         const flag = self.lookup(name) orelse return error.NoSuchFlag;
-        return (@as(*[]const u8, @ptrCast(@alignCast(flag.value.ptr)))).*;
+        if (!std.mem.eql(u8, flag.value.typeName(), "string")) return error.TypeMismatch;
+        return try flag.value.string(self.gpa);
     }
 
     pub fn nameFn(self: *const FlagSet) []const u8 {
@@ -402,34 +445,17 @@ pub const FlagSet = struct {
     }
 
     pub fn flagUsagesWrapped(self: *const FlagSet, cols: usize) []const u8 {
-        _ = cols;
         const gpa = self.gpa;
         var buf: std.ArrayListUnmanaged(u8) = .empty;
+        const Ctx = struct { buf: *std.ArrayListUnmanaged(u8), gpa: std.mem.Allocator };
+        var ctx = Ctx{ .buf = &buf, .gpa = gpa };
         for (self.ordered_formal.items) |f| {
             if (f.hidden) continue;
-            if (f.shorthand.len > 0) {
-                const line = std.fmt.allocPrint(gpa, "  -{s}, --{s}", .{ f.shorthand, f.name }) catch continue;
-                defer gpa.free(line);
-                buf.appendSlice(gpa, line) catch continue;
-            } else {
-                const line = std.fmt.allocPrint(gpa, "      --{s}", .{f.name}) catch continue;
-                defer gpa.free(line);
-                buf.appendSlice(gpa, line) catch continue;
-            }
-            const hasDefault = !std.mem.eql(u8, f.def_value, "false") and !std.mem.eql(u8, f.def_value, "");
-            const needsDefault = !std.mem.eql(u8, f.no_opt_def_val, "true");
-            if (hasDefault and needsDefault) {
-                const dv = std.fmt.allocPrint(gpa, "={s}", .{f.def_value}) catch continue;
-                defer gpa.free(dv);
-                buf.appendSlice(gpa, dv) catch continue;
-            }
-            if (f.usage.len > 0) {
-                const u = std.fmt.allocPrint(gpa, "\n    \t{s}", .{f.usage}) catch continue;
-                defer gpa.free(u);
-                buf.appendSlice(gpa, u) catch continue;
-            }
-            if (f.deprecated.len > 0) buf.appendSlice(gpa, " (deprecated)") catch continue;
-            buf.appendSlice(gpa, "\n") catch continue;
+            formatFlagLine(f, cols, struct {
+                fn write(c: *Ctx, s: []const u8) !void {
+                    try c.buf.appendSlice(c.gpa, s);
+                }
+            }.write, &ctx) catch continue;
         }
         return buf.toOwnedSlice(gpa) catch return "?";
     }
@@ -437,6 +463,9 @@ pub const FlagSet = struct {
     pub fn parseAll(self: *FlagSet, arguments: []const []const u8, callback: *const fn (*Flag, []const u8) anyerror!void) !void {
         const gpa = self.gpa;
         self.parsed = true;
+        // Reset args on re-parse
+        self.args.clearRetainingCapacity();
+        self.args_len_at_dash = -1;
         if (arguments.len == 0) return;
         var remaining = try std.ArrayListUnmanaged([]const u8).initCapacity(gpa, arguments.len);
         defer remaining.deinit(gpa);
@@ -489,7 +518,6 @@ pub const FlagSet = struct {
     }
 
     fn parseLongArg(self: *FlagSet, s: []const u8, remaining: *std.ArrayListUnmanaged([]const u8)) !void {
-        const gpa = self.gpa;
         var name: []const u8 = undefined;
         var value: []const u8 = undefined;
         var has_value: bool = false;
@@ -505,8 +533,6 @@ pub const FlagSet = struct {
         const flag = self.lookup(name);
         if (flag == null) {
             if (name.len > 0 and self.parse_errors_allowlist.unknown_flags) {
-                if (!has_value) return;
-                try remaining.insert(gpa, 0, value);
                 return;
             }
             return self.doFailWith(.unknown_flag, name, error.NoSuchFlag);
@@ -538,7 +564,10 @@ pub const FlagSet = struct {
                 shorthands.* = shorthands.*[1..];
                 return;
             }
-            return self.doFailWith(.unknown_shorthand, &.{c}, error.NoSuchFlag);
+            return self.doFailWith(.unknown_shorthand, blk: {
+                self._shorthand_err_buf[0] = c;
+                break :blk &self._shorthand_err_buf;
+            }, error.NoSuchFlag);
         }
         const f = flag.?;
 
@@ -601,6 +630,9 @@ pub const FlagSet = struct {
     pub fn parse(self: *FlagSet, arguments: []const []const u8) !void {
         const gpa = self.gpa;
         self.parsed = true;
+        // Reset args on re-parse
+        self.args.clearRetainingCapacity();
+        self.args_len_at_dash = -1;
         if (arguments.len == 0) return;
 
         var remaining = try std.ArrayListUnmanaged([]const u8).initCapacity(gpa, arguments.len);
@@ -621,34 +653,65 @@ pub const FlagSet = struct {
         const w = self.out_writer.?;
         for (self.ordered_formal.items) |f| {
             if (f.hidden) continue;
-            if (f.shorthand.len > 0) {
-                w.print("  -{s}, --{s}", .{ f.shorthand, f.name }) catch return;
-            } else {
-                w.print("      --{s}", .{f.name}) catch return;
-            }
-            const hasDefault = !std.mem.eql(u8, f.def_value, "false") and !std.mem.eql(u8, f.def_value, "");
-            const needsDefault = !std.mem.eql(u8, f.no_opt_def_val, "true");
-            if (hasDefault and needsDefault) w.print("={s}", .{f.def_value}) catch return;
-            if (f.usage.len > 0) w.print("\n    \t{s}", .{f.usage}) catch return;
-            if (f.deprecated.len > 0) w.print(" (deprecated: {s})", .{f.deprecated}) catch return;
-            w.print("\n", .{}) catch return;
+            formatFlagLineWriter(f, 0, w) catch return;
         }
     }
 };
+
+/// Shared helper: format a single flag line into an ArrayList (for flagUsagesWrapped)
+fn formatFlagLine(
+    f: *const Flag,
+    cols: usize,
+    writeFn: anytype,
+    ctx: anytype,
+) !void {
+    if (f.shorthand.len > 0) {
+        try writeFn(ctx, "  -");
+        try writeFn(ctx, f.shorthand);
+        try writeFn(ctx, ", --");
+        try writeFn(ctx, f.name);
+    } else {
+        try writeFn(ctx, "      --");
+        try writeFn(ctx, f.name);
+    }
+    const hasDefault = !std.mem.eql(u8, f.def_value, "false") and !std.mem.eql(u8, f.def_value, "");
+    const needsDefault = !std.mem.eql(u8, f.no_opt_def_val, "true");
+    if (hasDefault and needsDefault) {
+        try writeFn(ctx, "=");
+        try writeFn(ctx, f.def_value);
+    }
+    if (f.usage.len > 0) {
+        try writeFn(ctx, "\n    \t");
+        try writeFn(ctx, f.usage);
+    }
+    if (f.deprecated.len > 0) try writeFn(ctx, " (deprecated)");
+    try writeFn(ctx, "\n");
+    _ = cols; // TODO: implement line wrapping at cols boundary
+}
+
+/// Shared helper: format a single flag line directly to a writer (for printDefaults / defaultUsage)
+fn formatFlagLineWriter(f: *const Flag, cols: usize, w: *std.Io.Writer) !void {
+    if (f.shorthand.len > 0) {
+        try w.print("  -{s}, --{s}", .{ f.shorthand, f.name });
+    } else {
+        try w.print("      --{s}", .{f.name});
+    }
+    const hasDefault = !std.mem.eql(u8, f.def_value, "false") and !std.mem.eql(u8, f.def_value, "");
+    const needsDefault = !std.mem.eql(u8, f.no_opt_def_val, "true");
+    if (hasDefault and needsDefault) try w.print("={s}", .{f.def_value});
+    if (f.usage.len > 0) try w.print("\n    \t{s}", .{f.usage});
+    if (f.deprecated.len > 0) try w.print(" (deprecated: {s})", .{f.deprecated});
+    try w.print("\n", .{});
+    _ = cols;
+}
 
 fn defaultUsage(fs: *FlagSet) void {
     if (fs.out_writer == null) return;
     const w = fs.out_writer.?;
     w.print("Usage of {s}:\n", .{fs.name}) catch return;
     for (fs.ordered_formal.items) |f| {
-        if (f.shorthand.len > 0) {
-            w.print("  -{s}, --{s}", .{ f.shorthand, f.name }) catch return;
-        } else {
-            w.print("  --{s}", .{f.name}) catch return;
-        }
-        if (!std.mem.eql(u8, f.def_value, "false") and !std.mem.eql(u8, f.def_value, "")) w.print("={s}", .{f.def_value}) catch return;
-        if (f.usage.len > 0) w.print("\n    \t{s}", .{f.usage}) catch return;
-        w.print("\n", .{}) catch return;
+        if (f.hidden) continue;
+        formatFlagLineWriter(f, 0, w) catch return;
     }
 }
 
@@ -661,28 +724,33 @@ pub fn newFlagSet(gpa: std.mem.Allocator, name: []const u8) FlagSet {
 var commandLine: ?FlagSet = null;
 
 pub fn initCommandLine(gpa: std.mem.Allocator) void {
-    const args = std.process.argsAlloc(gpa) catch @panic("Failed to read args");
-    defer std.process.argsFree(gpa, args);
-    commandLine = FlagSet.init(gpa, if (args.len > 0) args[0] else "program");
+    commandLine = FlagSet.init(gpa, "program");
 }
 pub fn getCommandLine(gpa: std.mem.Allocator) *FlagSet {
     if (commandLine == null) initCommandLine(gpa);
     return &commandLine.?;
 }
 pub fn deinitCommandLine() void {
-    if (commandLine) |*cl| cl.deinit();
+    if (commandLine) |*cl| {
+        cl.deinit();
+        commandLine = null;
+    }
 }
 pub fn boolCL(p: *bool, name: []const u8, value: bool, usage: []const u8) !void {
-    try getCommandLine(std.heap.page_allocator).boolVar(p, name, value, usage);
+    const cl = getCommandLine(std.heap.page_allocator);
+    try cl.boolVar(p, name, value, usage);
 }
 pub fn intCL(comptime T: type, p: *T, name: []const u8, value: T, usage: []const u8) !void {
-    try getCommandLine(std.heap.page_allocator).intVar(T, p, name, value, usage);
+    const cl = getCommandLine(std.heap.page_allocator);
+    try cl.intVar(T, p, name, value, usage);
 }
 pub fn stringCL(p: *[]const u8, name: []const u8, value: []const u8, usage: []const u8) !void {
-    try getCommandLine(std.heap.page_allocator).stringVar(p, name, value, usage);
+    const cl = getCommandLine(std.heap.page_allocator);
+    try cl.stringVar(p, name, value, usage);
 }
 pub fn parseCL(arguments: []const []const u8) !void {
-    try getCommandLine(std.heap.page_allocator).parse(arguments);
+    const cl = getCommandLine(std.heap.page_allocator);
+    try cl.parse(arguments);
 }
 pub fn argsCL() []const []const u8 {
     if (commandLine) |*cl| return cl.argList() else return &.{};

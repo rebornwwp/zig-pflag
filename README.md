@@ -110,15 +110,15 @@ pub fn main(init: std.process.Init) !void {
 | uint u8–u64 | `uintVar(u32, p, "port", 0, "")` | `--port=8080` |
 | float f32/f64 | `floatVar(f64, p, "rate", 0, "")` | `--rate=3.14` |
 | string | `stringVarP(p, "name", "n", "", "")` | `--name Alice` / `-n Alice` |
-| count | `countVarP(p, "v", "v", 0, "")` | `-vvv` (value = 3) |
-| duration | `durationVar(p, "timeout", 0, "")` | `--timeout=30s` (ns) |
-| stringSlice | `stringSliceVarP(p, "tag", "t", &.{}, "")` | `-t a -t b` |
-| intSlice | `intSliceVar(i32, p, "port", &.{}, "")` | `--port=80 --port=443` |
-| boolSlice | `boolSliceVar(p, "flag", &.{}, "")` | `--flag --flag` |
-| floatSlice | `floatSliceVar(f64, p, "v", &.{}, "")` | `--v=1.0 --v=2.5` |
-| uintSlice | `uintSliceVar(u32, p, "p", &.{}, "")` | `--p=80 --p=443` |
-| stringToInt | `stringToIntVar(i32, p, "h", 0, "")` | `--h=a=1 --h=b=2` |
-| stringToString | `stringToStringVar(p, "l", "", "")` | `--l=env=prod` |
+| count | `countVarP(p, "v", "v", 0, "")` | `-vvv` (value = 3); shorthand +1 |
+| duration | `durationVar(p, "timeout", 0, "")` | `--timeout=30s / 500ms / 100us` (ns) |
+| stringSlice | `stringSliceVarP(&state, "tag", "t", &.{}, "")` | `-t a -t b` / CSV: `-t a,b` |
+| intSlice | `intSliceVar(i32, &state, "port", &.{}, "")` | `--port=80 --port=443` / CSV: `--port=80,443` |
+| boolSlice | `boolSliceVar(&state, "flag", &.{}, "")` | `--flag --flag` |
+| floatSlice | `floatSliceVar(f64, &state, "v", &.{}, "")` | `--v=1.0 --v=2.5` / CSV: `--v=1.0,2.5` |
+| uintSlice | `uintSliceVar(u32, &state, "p", &.{}, "")` | `--p=80 --p=443` / CSV: `--p=80,443` |
+| stringToInt | `stringToIntVar(i32, &state, "h", 0, "")` | `--h=a=1 --h=b=2` / CSV: `--h=a=1,b=2` |
+| stringToString | `stringToStringVar(&state, "l", "", "")` | `--l=env=prod` / CSV: `--l=a=1,b=2` |
 
 ## Port Status
 
@@ -128,13 +128,13 @@ Compared against Go [spf13/pflag v1.0.9](https://github.com/spf13/pflag). ✅ = 
 
 | Go Type | Zig Support | Notes |
 |---------|:-----------:|-------|
-| bool | ✅ | `boolVar` / `boolVarP` |
-| count | ✅ | `countVar` / `countVarP` |
+| bool | ✅ | `boolVar` / `boolVarP`; case-insensitive: true/false/T/F/1/0 |
+| count | ✅ | `countVar` / `countVarP`; assignment semantics; `-vvv` increment |
 | int, int8, int16, int32, int64 | ✅ | `intVar(T)` / `intVarP(T)`, comptime-generic |
 | uint, uint8, uint16, uint32, uint64 | ✅ | `uintVar(T)` / `uintVarP(T)`, comptime-generic |
 | float32, float64 | ✅ | `floatVar(T)` / `floatVarP(T)`, comptime-generic |
 | string | ✅ | `stringVar` / `stringVarP` |
-| duration | ✅ | `durationVar` / `durationVarP` |
+| duration | ✅ | `durationVar` / `durationVarP`; supports ms, us, ns, s, m, h, d |
 | bytes | ❌ | BytesHex / BytesBase64 flag types |
 | func | ❌ | Callback-based flag dispatch |
 | text | ❌ | `encoding.TextUnmarshaler` adapter |
@@ -147,7 +147,7 @@ Compared against Go [spf13/pflag v1.0.9](https://github.com/spf13/pflag). ✅ = 
 | intSlice, int32Slice, int64Slice | ✅ | `intSliceVar(T)` / `intSliceVarP(T)`, i32 + i64 |
 | uintSlice | ✅ | `uintSliceVar(T)` / `uintSliceVarP(T)`, u8–u64 |
 | float32Slice, float64Slice | ✅ | `floatSliceVar(T)` / `floatSliceVarP(T)` |
-| stringSlice | ✅ | `stringSliceVar` / `stringSliceVarP` |
+| stringSlice | ✅ | `stringSliceVar` / `stringSliceVarP`; CSV comma-separated support |
 | stringArray | ✅ | `stringArrayVar` / `stringArrayVarP` |
 | durationSlice | ❌ | Repeatable duration flags |
 
@@ -343,6 +343,12 @@ Flag usages (text)
 | `setNormalizeFunc(fn)` | Custom flag name normalizer |
 | `getNormalizeFunc()` | Get current normalizer |
 | `addFlagSet(other)` | Merge another FlagSet |
+| `argsLenAtDash()` | Position of `--` in argument list |
+| `getBool(name)` | Get bool value with type check |
+| `getInt(T, name)` | Get int value with type check |
+| `getUint(T, name)` | Get uint value with type check |
+| `getFloat(T, name)` | Get float value with type check |
+| `getString(name)` | Get string value (caller owns result) |
 | `hasFlags()` / `hasAvailableFlags()` | Query flag state |
 | `lastError()` | Details of last parse error |
 

@@ -28,11 +28,11 @@ fn makeFloatVtable(comptime T: type) Value.VTable {
         }.di,
     };
 }
-fn floatStrFn(comptime T: type) *const fn (*anyopaque, std.mem.Allocator) []const u8 {
+fn floatStrFn(comptime T: type) *const fn (*anyopaque, std.mem.Allocator) anyerror![]const u8 {
     return struct {
-        fn str(ptr: *anyopaque, gpa: std.mem.Allocator) []const u8 {
+        fn str(ptr: *anyopaque, gpa: std.mem.Allocator) anyerror![]const u8 {
             const p: *T = @ptrCast(@alignCast(ptr));
-            return std.fmt.allocPrint(gpa, "{d}", .{p.*}) catch "?";
+            return std.fmt.allocPrint(gpa, "{d}", .{p.*});
         }
     }.str;
 }

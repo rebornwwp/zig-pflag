@@ -34,18 +34,24 @@ pub fn main(init: std.process.Init) !void {
     var tags: std.ArrayListUnmanaged([]const u8) = .empty;
     defer tags.deinit(gpa);
     tags.append(gpa, "default") catch {};
-    try fs.stringSliceVarP(&tags, "tag", "t", &.{}, "tags (repeatable)");
+    var tags_state = pflag.StringSliceState{ .value = &tags, .gpa = gpa };
+    try fs.stringSliceVarP(&tags_state, "tag", "t", &.{}, "tags (repeatable)");
     var ports: std.ArrayListUnmanaged(i32) = .empty;
-    try fs.intSliceVar(i32, &ports, "expose", &.{}, "exposed ports");
+    var ports_state = pflag.SliceState(i32){ .value = &ports, .gpa = gpa };
+    try fs.intSliceVar(i32, &ports_state, "expose", &.{}, "exposed ports");
     var flags: std.ArrayListUnmanaged(bool) = .empty;
-    try fs.boolSliceVar(&flags, "flag", &.{}, "bool flags");
+    var flags_state = pflag.SliceState(bool){ .value = &flags, .gpa = gpa };
+    try fs.boolSliceVar(&flags_state, "flag", &.{}, "bool flags");
     var scores: std.ArrayListUnmanaged(f32) = .empty;
-    try fs.floatSliceVar(f32, &scores, "score", &.{}, "scores");
+    var scores_state = pflag.SliceState(f32){ .value = &scores, .gpa = gpa };
+    try fs.floatSliceVar(f32, &scores_state, "score", &.{}, "scores");
 
     var headers: std.StringHashMapUnmanaged(i32) = .empty;
-    try fs.stringToIntVar(i32, &headers, "header", 0, "headers as key=value");
+    var headers_state = pflag.StringToIntState(i32){ .value = &headers, .gpa = gpa };
+    try fs.stringToIntVar(i32, &headers_state, "header", 0, "headers as key=value");
     var labels: std.StringHashMapUnmanaged([]const u8) = .empty;
-    try fs.stringToStringVar(&labels, "label", "", "labels as key=value");
+    var labels_state = pflag.StringToStringState{ .value = &labels, .gpa = gpa };
+    try fs.stringToStringVar(&labels_state, "label", "", "labels as key=value");
 
     try fs.markDeprecated("big", "use --count instead");
     var secret: bool = false;
