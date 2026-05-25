@@ -110,15 +110,15 @@ pub fn main(init: std.process.Init) !void {
 | uint u8–u64 | `uintVar(u32, p, "port", 0, "")` | `--port=8080` |
 | float f32/f64 | `floatVar(f64, p, "rate", 0, "")` | `--rate=3.14` |
 | string | `stringVarP(p, "name", "n", "", "")` | `--name Alice` / `-n Alice` |
-| count | `countVarP(p, "v", "v", 0, "")` | `-vvv`（值为 3） |
-| duration | `durationVar(p, "timeout", 0, "")` | `--timeout=30s`（纳秒） |
-| stringSlice | `stringSliceVarP(p, "tag", "t", &.{}, "")` | `-t a -t b` |
-| intSlice | `intSliceVar(i32, p, "port", &.{}, "")` | `--port=80 --port=443` |
-| boolSlice | `boolSliceVar(p, "flag", &.{}, "")` | `--flag --flag` |
-| floatSlice | `floatSliceVar(f64, p, "v", &.{}, "")` | `--v=1.0 --v=2.5` |
-| uintSlice | `uintSliceVar(u32, p, "p", &.{}, "")` | `--p=80 --p=443` |
-| stringToInt | `stringToIntVar(i32, p, "h", 0, "")` | `--h=a=1 --h=b=2` |
-| stringToString | `stringToStringVar(p, "l", "", "")` | `--l=env=prod` |
+| count | `countVarP(p, "v", "v", 0, "")` | `-vvv`（值为 3）；短选项 +1 |
+| duration | `durationVar(p, "timeout", 0, "")` | `--timeout=30s / 500ms / 100us`（纳秒） |
+| stringSlice | `stringSliceVarP(&state, "tag", "t", &.{}, "")` | `-t a -t b` / CSV: `-t a,b` |
+| intSlice | `intSliceVar(i32, &state, "port", &.{}, "")` | `--port=80 --port=443` / CSV: `--port=80,443` |
+| boolSlice | `boolSliceVar(&state, "flag", &.{}, "")` | `--flag --flag` |
+| floatSlice | `floatSliceVar(f64, &state, "v", &.{}, "")` | `--v=1.0 --v=2.5` / CSV: `--v=1.0,2.5` |
+| uintSlice | `uintSliceVar(u32, &state, "p", &.{}, "")` | `--p=80 --p=443` / CSV: `--p=80,443` |
+| stringToInt | `stringToIntVar(i32, &state, "h", 0, "")` | `--h=a=1 --h=b=2` / CSV: `--h=a=1,b=2` |
+| stringToString | `stringToStringVar(&state, "l", "", "")` | `--l=env=prod` / CSV: `--l=a=1,b=2` |
 
 ## 移植状态
 
@@ -128,13 +128,13 @@ pub fn main(init: std.process.Init) !void {
 
 | Go 类型 | Zig 支持 | 说明 |
 |---------|:-----------:|-------|
-| bool | ✅ | `boolVar` / `boolVarP` |
-| count | ✅ | `countVar` / `countVarP` |
+| bool | ✅ | `boolVar` / `boolVarP`；大小写不敏感：true/false/T/F/1/0 |
+| count | ✅ | `countVar` / `countVarP`；赋值语义；`-vvv` 递增计数 |
 | int, int8, int16, int32, int64 | ✅ | `intVar(T)` / `intVarP(T)`，comptime 泛型 |
 | uint, uint8, uint16, uint32, uint64 | ✅ | `uintVar(T)` / `uintVarP(T)`，comptime 泛型 |
 | float32, float64 | ✅ | `floatVar(T)` / `floatVarP(T)`，comptime 泛型 |
 | string | ✅ | `stringVar` / `stringVarP` |
-| duration | ✅ | `durationVar` / `durationVarP` |
+| duration | ✅ | `durationVar` / `durationVarP`；支持 ms、us、ns、s、m、h、d |
 | bytes | ❌ | BytesHex / BytesBase64 类型 |
 | func | ❌ | 回调式参数分发 |
 | text | ❌ | `encoding.TextUnmarshaler` 适配器 |
@@ -147,7 +147,7 @@ pub fn main(init: std.process.Init) !void {
 | intSlice, int32Slice, int64Slice | ✅ | `intSliceVar(T)` / `intSliceVarP(T)`，i32 + i64 |
 | uintSlice | ✅ | `uintSliceVar(T)` / `uintSliceVarP(T)`，u8–u64 |
 | float32Slice, float64Slice | ✅ | `floatSliceVar(T)` / `floatSliceVarP(T)` |
-| stringSlice | ✅ | `stringSliceVar` / `stringSliceVarP` |
+| stringSlice | ✅ | `stringSliceVar` / `stringSliceVarP`；CSV 逗号分隔 |
 | stringArray | ✅ | `stringArrayVar` / `stringArrayVarP` |
 | durationSlice | ❌ | 可重复的 duration 参数 |
 
@@ -343,6 +343,12 @@ Flag usages (text)
 | `setNormalizeFunc(fn)` | 自定义参数名规范化函数 |
 | `getNormalizeFunc()` | 获取当前的规范化函数 |
 | `addFlagSet(other)` | 合并另一个 FlagSet |
+| `argsLenAtDash()` | 返回 `--` 在参数列表中的位置 |
+| `getBool(name)` | 获取 bool 值（带类型检查） |
+| `getInt(T, name)` | 获取 int 值（带类型检查） |
+| `getUint(T, name)` | 获取 uint 值（带类型检查） |
+| `getFloat(T, name)` | 获取 float 值（带类型检查） |
+| `getString(name)` | 获取 string 值（调用者拥有内存） |
 | `hasFlags()` / `hasAvailableFlags()` | 查询参数状态 |
 | `lastError()` | 获取最后一次解析错误的详情 |
 
