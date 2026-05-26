@@ -55,11 +55,36 @@ pub fn build(b: *std.Build) void {
     const run_demo_step = b.step("run-demo", "Run the zig-pflag demo");
     run_demo_step.dependOn(&run_demo.step);
 
+    // ── Struct config example ──
+    const struct_mod = b.createModule(.{
+        .root_source_file = b.path("examples/struct_config.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "pflag", .module = lib_mod },
+        },
+    });
+    const struct_exe = b.addExecutable(.{
+        .name = "example-struct_config",
+        .root_module = struct_mod,
+    });
+    const install_struct = b.addInstallArtifact(struct_exe, .{});
+    b.getInstallStep().dependOn(&install_struct.step);
+
+    const run_struct = b.addRunArtifact(struct_exe);
+    run_struct.step.dependOn(&install_struct.step);
+    if (b.args) |args| {
+        run_struct.addArgs(args);
+    }
+    const run_struct_step = b.step("run-struct-config", "Run the struct config example");
+    run_struct_step.dependOn(&run_struct.step);
+
     // ── Allocator examples (N types × M allocators) ──
     const example_names = [_][]const u8{
         "int_gpa",         "int_arena",         "int_page",         "int_fba",
         "string_gpa",      "string_arena",      "string_page",      "string_fba",
         "float_slice_gpa", "float_slice_arena", "float_slice_page", "float_slice_fba",
+        "struct_config",
     };
 
     const build_examples_step = b.step("build-examples", "Build all allocator examples (3 types × 4 allocators = 12 exes)");
