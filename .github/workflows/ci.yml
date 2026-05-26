@@ -25,10 +25,13 @@ jobs:
           version: ${{ matrix.zig-version }}
 
       - name: Check formatting
-        run: zig fmt --check src/
+        run: zig fmt --check src/ examples/ build.zig
 
       - name: Run tests
         run: zig build test --summary all
+
+      - name: Check examples build
+        run: zig build build-examples --summary all
 
       - name: Check demo builds
         run: zig build
