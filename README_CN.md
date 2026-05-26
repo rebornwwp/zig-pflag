@@ -4,7 +4,7 @@
 
 Zig 的 POSIX/GNU 风格命令行参数解析库，从 Go 的 [spf13/pflag](https://github.com/spf13/pflag) v1.0.9 移植而来。
 
-Zig 0.16.0 · 12 个源文件 · 2502 行代码 · 89 个测试
+Zig 0.16.0 · 12 个源文件 · ~2500 行代码 · 110 个测试
 
 ## 安装
 
@@ -175,7 +175,7 @@ pub fn main(init: std.process.Init) !void {
 
 ## 示例
 
-`demo/main.zig` 中包含了一个展示所有参数类型的完整示例。
+`examples/demo.zig` 中包含了一个展示所有参数类型的完整示例。
 
 ### 使用默认值运行
 
@@ -320,6 +320,64 @@ Flag usages (text)
   annotation[name][category] = basic
 ```
 
+### Struct Config 示例
+
+`examples/struct_config.zig` 演示了如何将 Zig 结构体字段绑定到命令行参数。
+
+```bash
+zig build run-struct-config
+```
+
+**默认输出：**
+
+```
+Parsed server config:
+ServerConfig {
+  port       = 8080
+  host       = 127.0.0.1
+  workers    = 4
+  verbose    = false
+  timeout    = 30s
+  rate_limit = 100
+  tags       = (none)
+}
+```
+
+**使用自定义参数：**
+
+```bash
+zig build run-struct-config -- \
+  --port=3000 --host=0.0.0.0 --workers=8 --verbose \
+  --timeout=60s --rate-limit=500 --tag=api --tag=web
+```
+
+```
+Parsed server config:
+ServerConfig {
+  port       = 3000
+  host       = 0.0.0.0
+  workers    = 8
+  verbose    = true
+  timeout    = 60s
+  rate_limit = 500
+  tags       = api, web
+}
+```
+
+### 所有示例文件
+
+所有示例文件位于 `examples/` 目录。一次编译所有：
+
+```bash
+zig build build-examples
+```
+
+| 命令 | 说明 |
+|---------|-------------|
+| `zig build run-demo` | 完整示例（所有参数类型） |
+| `zig build run-struct-config` | 结构体字段绑定 |
+| `zig build build-examples` | 编译全部 14 个示例 |
+
 ## FlagSet API
 
 | 方法 | 说明 |
@@ -367,7 +425,14 @@ src/
 ├── duration_types.zig # Duration 类型（s/m/h/d）
 ├── slice_types.zig    # string/int/uint/bool/float 切片
 ├── map_types.zig      # string→int、string→string map
-└── pflag_test.zig     # 89 个测试
+└── pflag_test.zig     # 110 个测试
+
+examples/
+├── demo.zig           # 完整示例（所有参数类型）
+├── struct_config.zig  # 结构体字段绑定到参数
+├── int_*.zig          # int + GPA/Arena/Page/FBA
+├── string_*.zig       # string + GPA/Arena/Page/FBA
+└── float_slice_*.zig  # floatSlice + GPA/Arena/Page/FBA
 ```
 
 ## 配合 zig-cobra 使用

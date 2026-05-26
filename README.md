@@ -4,7 +4,7 @@
 
 POSIX/GNU-style flag parsing for Zig, ported from Go's [spf13/pflag](https://github.com/spf13/pflag) v1.0.9.
 
-Zig 0.16.0 · 12 source files · 2502 lines · 89 tests
+Zig 0.16.0 · 12 source files · ~2500 lines · 110 tests
 
 ## Installation
 
@@ -175,7 +175,7 @@ Compared against Go [spf13/pflag v1.0.9](https://github.com/spf13/pflag). ✅ = 
 
 ## Demo
 
-A fully working example demonstrating every flag type is included in `demo/main.zig`.
+A fully working example demonstrating every flag type is in `examples/demo.zig`.
 
 ### Run with default values
 
@@ -320,6 +320,64 @@ Flag usages (text)
   annotation[name][category] = basic
 ```
 
+### Struct Config Example
+
+`examples/struct_config.zig` shows how to bind Zig struct fields to command-line flags.
+
+```bash
+zig build run-struct-config
+```
+
+**Default output:**
+
+```
+Parsed server config:
+ServerConfig {
+  port       = 8080
+  host       = 127.0.0.1
+  workers    = 4
+  verbose    = false
+  timeout    = 30s
+  rate_limit = 100
+  tags       = (none)
+}
+```
+
+**With custom arguments:**
+
+```bash
+zig build run-struct-config -- \
+  --port=3000 --host=0.0.0.0 --workers=8 --verbose \
+  --timeout=60s --rate-limit=500 --tag=api --tag=web
+```
+
+```
+Parsed server config:
+ServerConfig {
+  port       = 3000
+  host       = 0.0.0.0
+  workers    = 8
+  verbose    = true
+  timeout    = 60s
+  rate_limit = 500
+  tags       = api, web
+}
+```
+
+### All Example Files
+
+All examples live under `examples/`. Build them all at once:
+
+```bash
+zig build build-examples
+```
+
+| Command | What it runs |
+|---------|-------------|
+| `zig build run-demo` | Full demo (all flag types) |
+| `zig build run-struct-config` | Struct field binding |
+| `zig build build-examples` | Compile all 14 examples |
+
 ## FlagSet API
 
 | Method | Description |
@@ -367,7 +425,14 @@ src/
 ├── duration_types.zig # Duration type (s/m/h/d)
 ├── slice_types.zig    # string/int/uint/bool/float slices
 ├── map_types.zig      # string→int, string→string maps
-└── pflag_test.zig     # 89 tests
+└── pflag_test.zig     # 110 tests
+
+examples/
+├── demo.zig           # Full demo (all flag types)
+├── struct_config.zig  # Struct field binding to flags
+├── int_*.zig          # int + GPA/Arena/Page/FBA
+├── string_*.zig       # string + GPA/Arena/Page/FBA
+└── float_slice_*.zig  # floatSlice + GPA/Arena/Page/FBA
 ```
 
 ## Usage with zig-cobra
