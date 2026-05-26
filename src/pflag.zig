@@ -93,6 +93,10 @@ pub const Flag = struct {
     usage: []const u8 = "",
     value: Value,
     def_value: []const u8,
+    /// True if this flag was explicitly set on the command line.
+    /// Used by FlagSet.changed(name), Lookup, and Get functions.
+    /// Distinct from VTable-level changed/allocated flags which track
+    /// memory ownership of dupe'd data items.
     changed: bool = false,
     no_opt_def_val: []const u8 = "",
     deprecated: []const u8 = "",

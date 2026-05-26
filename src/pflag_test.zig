@@ -654,10 +654,6 @@ test "StringSlice accumulates values" {
     var fs = newTestFlagSet();
     defer fs.deinit();
     var slice: std.ArrayListUnmanaged([]const u8) = .empty;
-    defer {
-        for (slice.items) |s| testing.allocator.free(s);
-        slice.deinit(testing.allocator);
-    }
     var state = pflag.StringSliceState{ .value = &slice, .gpa = testing.allocator };
     try fs.stringSliceVar(&state, "tag", &.{}, "");
     try fs.parse(&.{ "--tag=a", "--tag=b", "--tag=c" });
@@ -672,10 +668,6 @@ test "StringSlice with shorthand" {
     var fs = newTestFlagSet();
     defer fs.deinit();
     var slice: std.ArrayListUnmanaged([]const u8) = .empty;
-    defer {
-        for (slice.items) |s| testing.allocator.free(s);
-        slice.deinit(testing.allocator);
-    }
     var state = pflag.StringSliceState{ .value = &slice, .gpa = testing.allocator };
     fs.error_handling = .continue_on_error;
     try fs.stringSliceVarP(&state, "tag", "t", &.{}, "");
@@ -688,10 +680,6 @@ test "StringSlice first Set replaces defaults" {
     var fs = newTestFlagSet();
     defer fs.deinit();
     var slice: std.ArrayListUnmanaged([]const u8) = .empty;
-    defer {
-        for (slice.items) |s| testing.allocator.free(s);
-        slice.deinit(testing.allocator);
-    }
     var state = pflag.StringSliceState{ .value = &slice, .gpa = testing.allocator };
     try fs.stringSliceVar(&state, "tag", &.{ "default1", "default2" }, "");
     // Before parse: defaults are populated
@@ -706,10 +694,6 @@ test "StringSlice supports CSV format" {
     var fs = newTestFlagSet();
     defer fs.deinit();
     var slice: std.ArrayListUnmanaged([]const u8) = .empty;
-    defer {
-        for (slice.items) |s| testing.allocator.free(s);
-        slice.deinit(testing.allocator);
-    }
     var state = pflag.StringSliceState{ .value = &slice, .gpa = testing.allocator };
     try fs.stringSliceVar(&state, "tag", &.{}, "");
     try fs.parse(&.{"--tag=a,b,c"});
@@ -725,7 +709,6 @@ test "IntSlice accumulates values" {
     var fs = newTestFlagSet();
     defer fs.deinit();
     var slice: std.ArrayListUnmanaged(i32) = .empty;
-    defer slice.deinit(testing.allocator);
     var state = pflag.SliceState(i32){ .value = &slice, .gpa = testing.allocator };
     try fs.intSliceVar(i32, &state, "port", &.{}, "");
     try fs.parse(&.{ "--port=80", "--port=443", "--port=8080" });
@@ -893,7 +876,6 @@ test "StringToIntVar maps key=value" {
     defer fs.deinit();
     fs.error_handling = .continue_on_error;
     var map: std.StringHashMapUnmanaged(i32) = .empty;
-    defer map.deinit(testing.allocator);
     var state = pflag.StringToIntState(i32){ .value = &map, .gpa = testing.allocator };
     try fs.stringToIntVar(i32, &state, "headers", 0, "header map");
     try fs.parse(&.{ "--headers=a=1", "--headers=b=2", "--headers=c=3" });
@@ -908,7 +890,6 @@ test "StringToIntVar rejects non-key=value" {
     defer fs.deinit();
     fs.error_handling = .continue_on_error;
     var map: std.StringHashMapUnmanaged(i32) = .empty;
-    defer map.deinit(testing.allocator);
     var state = pflag.StringToIntState(i32){ .value = &map, .gpa = testing.allocator };
     try fs.stringToIntVar(i32, &state, "headers", 0, "");
     try testing.expectError(error.ExpectedKeyValue, fs.parse(&.{"--headers=badval"}));
@@ -921,14 +902,6 @@ test "StringToStringVar maps key=value" {
     defer fs.deinit();
     fs.error_handling = .continue_on_error;
     var map: std.StringHashMapUnmanaged([]const u8) = .empty;
-    defer {
-        var it = map.iterator();
-        while (it.next()) |e| {
-            testing.allocator.free(e.key_ptr.*);
-            testing.allocator.free(e.value_ptr.*);
-        }
-        map.deinit(testing.allocator);
-    }
     var state = pflag.StringToStringState{ .value = &map, .gpa = testing.allocator };
     try fs.stringToStringVar(&state, "labels", "", "");
     try fs.parse(&.{ "--labels=env=prod", "--labels=region=us-east" });
@@ -1005,7 +978,6 @@ test "UintSlice accumulates values" {
     var fs = newTestFlagSet();
     defer fs.deinit();
     var slice: std.ArrayListUnmanaged(u32) = .empty;
-    defer slice.deinit(testing.allocator);
     var state = pflag.SliceState(u32){ .value = &slice, .gpa = testing.allocator };
     try fs.uintSliceVar(u32, &state, "port", &.{}, "");
     try fs.parse(&.{ "--port=80", "--port=443", "--port=8080" });
@@ -1020,7 +992,6 @@ test "BoolSlice accumulates values" {
     var fs = newTestFlagSet();
     defer fs.deinit();
     var slice: std.ArrayListUnmanaged(bool) = .empty;
-    defer slice.deinit(testing.allocator);
     var state = pflag.SliceState(bool){ .value = &slice, .gpa = testing.allocator };
     try fs.boolSliceVar(&state, "flag", &.{}, "");
     try fs.parse(&.{ "--flag=true", "--flag=false", "--flag" });
@@ -1035,7 +1006,6 @@ test "BoolSlice with shorthand" {
     defer fs.deinit();
     fs.error_handling = .continue_on_error;
     var slice: std.ArrayListUnmanaged(bool) = .empty;
-    defer slice.deinit(testing.allocator);
     var state = pflag.SliceState(bool){ .value = &slice, .gpa = testing.allocator };
     try fs.boolSliceVarP(&state, "flag", "f", &.{}, "");
     try fs.parse(&.{ "-f", "-f", "-f" });
@@ -1048,7 +1018,6 @@ test "FloatSlice accumulates values" {
     var fs = newTestFlagSet();
     defer fs.deinit();
     var slice: std.ArrayListUnmanaged(f64) = .empty;
-    defer slice.deinit(testing.allocator);
     var state = pflag.SliceState(f64){ .value = &slice, .gpa = testing.allocator };
     try fs.floatSliceVar(f64, &state, "rate", &.{}, "");
     try fs.parse(&.{ "--rate=1.5", "--rate=2.5", "--rate=3.14" });
@@ -1061,7 +1030,6 @@ test "FloatSlice f32 type" {
     var fs = newTestFlagSet();
     defer fs.deinit();
     var slice: std.ArrayListUnmanaged(f32) = .empty;
-    defer slice.deinit(testing.allocator);
     var state = pflag.SliceState(f32){ .value = &slice, .gpa = testing.allocator };
     try fs.floatSliceVar(f32, &state, "val", &.{}, "");
     try fs.parse(&.{ "--val=0.5", "--val=1.0" });
@@ -1077,10 +1045,6 @@ test "StringArray accumulates values" {
     var state = pflag.StringArrayState{ .value = &slice, .gpa = testing.allocator };
     try fs.stringArrayVar(&state, "tag", &.{}, "");
     try fs.parse(&.{ "--tag=a", "--tag=b", "--tag=c" });
-    defer {
-        for (slice.items) |s| testing.allocator.free(s);
-        slice.deinit(testing.allocator);
-    }
     try testing.expectEqual(@as(usize, 3), slice.items.len);
     try testing.expectEqualStrings("a", slice.items[0]);
 }
@@ -1089,7 +1053,6 @@ test "StringArray with default values" {
     var fs = newTestFlagSet();
     defer fs.deinit();
     var slice: std.ArrayListUnmanaged([]const u8) = .empty;
-    defer slice.deinit(testing.allocator);
     var state = pflag.StringArrayState{ .value = &slice, .gpa = testing.allocator };
     try fs.stringArrayVar(&state, "tag", &.{ "alpha", "beta" }, "");
     try testing.expectEqual(@as(usize, 2), slice.items.len);
@@ -1105,10 +1068,6 @@ test "StringArray first Set replaces defaults" {
     try testing.expectEqual(@as(usize, 2), slice.items.len);
     // After parse: first Set replaces defaults
     try fs.parse(&.{"--tag=new"});
-    defer {
-        for (slice.items) |s| testing.allocator.free(s);
-        slice.deinit(testing.allocator);
-    }
     try testing.expectEqual(@as(usize, 1), slice.items.len);
     try testing.expectEqualStrings("new", slice.items[0]);
 }
@@ -1175,7 +1134,6 @@ test "StringToIntVar supports i64" {
     defer fs.deinit();
     fs.error_handling = .continue_on_error;
     var map: std.StringHashMapUnmanaged(i64) = .empty;
-    defer map.deinit(testing.allocator);
     var state = pflag.StringToIntState(i64){ .value = &map, .gpa = testing.allocator };
     try fs.stringToIntVar(i64, &state, "headers", 0, "header map (i64)");
     try fs.parse(&.{"--headers=x=9223372036854775807"});
@@ -1187,7 +1145,6 @@ test "StringToIntVar supports u32" {
     defer fs.deinit();
     fs.error_handling = .continue_on_error;
     var map: std.StringHashMapUnmanaged(u32) = .empty;
-    defer map.deinit(testing.allocator);
     var state = pflag.StringToIntState(u32){ .value = &map, .gpa = testing.allocator };
     try fs.stringToIntVar(u32, &state, "ports", 0, "port map");
     try fs.parse(&.{ "--ports=web=80", "--ports=ssl=443" });
@@ -1203,7 +1160,6 @@ test "StringToIntVar first Set replaces defaults" {
     // Pre-populate with defaults
     map.put(testing.allocator, "old1", 100) catch {};
     map.put(testing.allocator, "old2", 200) catch {};
-    defer map.deinit(testing.allocator);
     var state = pflag.StringToIntState(i32){ .value = &map, .gpa = testing.allocator };
     try fs.stringToIntVar(i32, &state, "headers", 0, "");
     try testing.expectEqual(@as(u32, 2), map.count());
@@ -1219,7 +1175,6 @@ test "StringToIntVar supports comma-separated pairs" {
     defer fs.deinit();
     fs.error_handling = .continue_on_error;
     var map: std.StringHashMapUnmanaged(i32) = .empty;
-    defer map.deinit(testing.allocator);
     var state = pflag.StringToIntState(i32){ .value = &map, .gpa = testing.allocator };
     try fs.stringToIntVar(i32, &state, "headers", 0, "");
     try fs.parse(&.{"--headers=a=1,b=2,c=3"});
@@ -1327,14 +1282,6 @@ test "StringToStringVar supports CSV format" {
     defer fs.deinit();
     fs.error_handling = .continue_on_error;
     var map: std.StringHashMapUnmanaged([]const u8) = .empty;
-    defer {
-        var it = map.iterator();
-        while (it.next()) |e| {
-            testing.allocator.free(e.key_ptr.*);
-            testing.allocator.free(e.value_ptr.*);
-        }
-        map.deinit(testing.allocator);
-    }
     var state = pflag.StringToStringState{ .value = &map, .gpa = testing.allocator };
     try fs.stringToStringVar(&state, "labels", "", "");
     try fs.parse(&.{"--labels=a=1,b=2,c=3"});

@@ -7,6 +7,12 @@ const Value = pflag.Value;
 /// Wrapper struct to track allocator for string values.
 /// Ensures set() duplicates the input so it doesn't dangle.
 /// The value pointed to must always be heap-allocated (or empty with allocated=false).
+///
+/// allocated flag: tracks whether the current value was created by the library
+/// via gpa.dupe(). Default values (string literals, stack buffers) are NOT owned
+/// by the library, so deinit() only frees the value when allocated == true.
+/// set() transitions allocated=true after the first successful dupe and frees
+/// the old value if it was previously allocated, preventing leaks on re-parse.
 pub const StringState = struct {
     value: *[]const u8,
     gpa: std.mem.Allocator,
