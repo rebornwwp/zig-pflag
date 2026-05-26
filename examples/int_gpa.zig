@@ -3,9 +3,9 @@ const std = @import("std");
 const pflag = @import("pflag");
 
 pub fn main() !void {
-var gpa_state = std.heap.DebugAllocator(.{}){};
-defer _ = gpa_state.deinit();
-const alloc = gpa_state.allocator();
+    var gpa_state = std.heap.DebugAllocator(.{}){};
+    defer _ = gpa_state.deinit();
+    const alloc = gpa_state.allocator();
 
     var fs = pflag.FlagSet.init(alloc, "int-gpa");
     defer fs.deinit();
@@ -13,7 +13,7 @@ const alloc = gpa_state.allocator();
     var count: i32 = 0;
     try fs.intVarP(i32, &count, "count", "c", 0, "a counter");
 
-    const args = [_][]const u8{ "--count=99" };
+    const args = [_][]const u8{"--count=99"};
     try fs.parse(&args);
 
     std.debug.assert(count == 99);

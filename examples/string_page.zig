@@ -12,7 +12,7 @@ pub fn main() !void {
     var state = pflag.StringState{ .value = &name, .gpa = alloc };
     try fs.stringStateVarP(&state, "name", "n", "world", "your name");
 
-    const args = [_][]const u8{ "--name=ziggy" };
+    const args = [_][]const u8{"--name=ziggy"};
     try fs.parse(&args);
 
     std.debug.assert(std.mem.eql(u8, name, "ziggy"));

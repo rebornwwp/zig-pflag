@@ -11,7 +11,7 @@ pub fn main() !void {
     var count: i32 = 0;
     try fs.intVarP(i32, &count, "count", "c", 0, "a counter");
 
-    const args = [_][]const u8{ "--count=99" };
+    const args = [_][]const u8{"--count=99"};
     try fs.parse(&args);
 
     std.debug.assert(count == 99);

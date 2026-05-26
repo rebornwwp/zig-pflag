@@ -3,9 +3,9 @@ const std = @import("std");
 const pflag = @import("pflag");
 
 pub fn main() !void {
-var gpa_state = std.heap.DebugAllocator(.{}){};
-defer _ = gpa_state.deinit();
-const alloc = gpa_state.allocator();
+    var gpa_state = std.heap.DebugAllocator(.{}){};
+    defer _ = gpa_state.deinit();
+    const alloc = gpa_state.allocator();
 
     var fs = pflag.FlagSet.init(alloc, "string-gpa");
     defer fs.deinit();
@@ -14,7 +14,7 @@ const alloc = gpa_state.allocator();
     var state = pflag.StringState{ .value = &name, .gpa = alloc };
     try fs.stringStateVarP(&state, "name", "n", "world", "your name");
 
-    const args = [_][]const u8{ "--name=ziggy" };
+    const args = [_][]const u8{"--name=ziggy"};
     try fs.parse(&args);
 
     std.debug.assert(std.mem.eql(u8, name, "ziggy"));

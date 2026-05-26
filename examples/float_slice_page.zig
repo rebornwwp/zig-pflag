@@ -18,11 +18,11 @@ pub fn main() !void {
     std.debug.assert(scores.items.len == 3);
     std.debug.assert(scores.items[0] == 1.5);
     std.debug.assert(scores.items[1] == 2.7);
-std.debug.assert(scores.items[2] == 3.14);
-std.debug.print("[float_slice/page] OK: {d} items: [", .{scores.items.len});
-for (scores.items, 0..) |v, i| {
-    if (i > 0) std.debug.print(", ", .{});
-    std.debug.print("{d}", .{v});
-}
-std.debug.print("]\n", .{});
+    std.debug.assert(scores.items[2] == 3.14);
+    std.debug.print("[float_slice/page] OK: {d} items: [", .{scores.items.len});
+    for (scores.items, 0..) |v, i| {
+        if (i > 0) std.debug.print(", ", .{});
+        std.debug.print("{d}", .{v});
+    }
+    std.debug.print("]\n", .{});
 }
