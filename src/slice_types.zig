@@ -84,8 +84,11 @@ const stringSliceVtable = Value.VTable{
     }.tn,
     .deinit = struct {
         fn di(ptr: *anyopaque, gpa: std.mem.Allocator) void {
-            _ = ptr;
-            _ = gpa;
+            const state: *StringSliceState = @ptrCast(@alignCast(ptr));
+            if (state.changed) {
+                for (state.value.items) |s| gpa.free(s);
+            }
+            state.value.deinit(gpa);
         }
     }.di,
 };
@@ -135,8 +138,11 @@ const stringArrayVtable = Value.VTable{
     }.tn,
     .deinit = struct {
         fn di(ptr: *anyopaque, gpa: std.mem.Allocator) void {
-            _ = ptr;
-            _ = gpa;
+            const state: *StringArrayState = @ptrCast(@alignCast(ptr));
+            if (state.changed) {
+                for (state.value.items) |s| gpa.free(s);
+            }
+            state.value.deinit(gpa);
         }
     }.di,
 };
@@ -176,8 +182,8 @@ fn intSliceVtable(comptime T: type) Value.VTable {
         }.tn,
         .deinit = struct {
             fn di(ptr: *anyopaque, gpa: std.mem.Allocator) void {
-                _ = ptr;
-                _ = gpa;
+                const state: *SliceState(T) = @ptrCast(@alignCast(ptr));
+                state.value.deinit(gpa);
             }
         }.di,
     };
@@ -225,8 +231,8 @@ fn uintSliceVtable(comptime T: type) Value.VTable {
         }.tn,
         .deinit = struct {
             fn di(ptr: *anyopaque, gpa: std.mem.Allocator) void {
-                _ = ptr;
-                _ = gpa;
+                const state: *SliceState(T) = @ptrCast(@alignCast(ptr));
+                state.value.deinit(gpa);
             }
         }.di,
     };
@@ -276,8 +282,8 @@ const boolSliceVtable = Value.VTable{
     }.tn,
     .deinit = struct {
         fn di(ptr: *anyopaque, gpa: std.mem.Allocator) void {
-            _ = ptr;
-            _ = gpa;
+            const state: *SliceState(bool) = @ptrCast(@alignCast(ptr));
+            state.value.deinit(gpa);
         }
     }.di,
 };
@@ -317,8 +323,8 @@ fn floatSliceVtable(comptime T: type) Value.VTable {
         }.tn,
         .deinit = struct {
             fn di(ptr: *anyopaque, gpa: std.mem.Allocator) void {
-                _ = ptr;
-                _ = gpa;
+                const state: *SliceState(T) = @ptrCast(@alignCast(ptr));
+                state.value.deinit(gpa);
             }
         }.di,
     };

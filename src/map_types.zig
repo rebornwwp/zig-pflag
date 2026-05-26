@@ -29,14 +29,24 @@ fn strToIntVtableGen(comptime T: type) Value.VTable {
                     const trimmed = std.mem.trim(u8, pair, " \t");
                     if (trimmed.len == 0) continue;
                     const eq = std.mem.indexOfScalar(u8, trimmed, '=') orelse return error.ExpectedKeyValue;
-                    const key = trimmed[0..eq];
+                    const key = try gpa.dupe(u8, trimmed[0..eq]);
+                    errdefer gpa.free(key);
                     const val_str = trimmed[eq + 1 ..];
                     const val = try std.fmt.parseInt(T, val_str, 0);
                     if (!state.changed) {
+                        // First Set: defaults may have literal (non-owned) keys,
+                        // so do NOT free them — just clear the backing storage.
                         map.clearRetainingCapacity();
                         state.changed = true;
                     }
-                    try map.put(gpa, key, val);
+                    // If key already in map (duped), replace value in place so we
+                    // don't leak the new duped key (put doesn't overwrite the key pointer).
+                    if (map.getEntry(key)) |entry| {
+                        entry.value_ptr.* = val;
+                        gpa.free(key);
+                    } else {
+                        try map.put(gpa, key, val);
+                    }
                 }
                 if (!state.changed) state.changed = true;
             }
@@ -67,8 +77,13 @@ fn strToIntVtableGen(comptime T: type) Value.VTable {
         }.tn,
         .deinit = struct {
             fn di(ptr: *anyopaque, gpa: std.mem.Allocator) void {
-                _ = ptr;
-                _ = gpa;
+                const State = StringToIntState(T);
+                const state: *State = @ptrCast(@alignCast(ptr));
+                if (state.changed) {
+                    var it = state.value.iterator();
+                    while (it.next()) |entry| gpa.free(entry.key_ptr.*);
+                }
+                state.value.deinit(gpa);
             }
         }.di,
     };
@@ -115,13 +130,8 @@ const strToStrVtable = Value.VTable{
                 const key = try gpa.dupe(u8, trimmed[0..eq]);
                 const val = try gpa.dupe(u8, trimmed[eq + 1 ..]);
                 if (!state.changed) {
-                    // First Set: clear defaults before adding
-                    // Free old key/value strings
-                    var old_it = map.iterator();
-                    while (old_it.next()) |entry| {
-                        gpa.free(entry.key_ptr.*);
-                        gpa.free(entry.value_ptr.*);
-                    }
+                    // First Set: defaults may have literal (non-owned) keys/values,
+                    // so do NOT free them — just clear the backing storage.
                     map.clearRetainingCapacity();
                     state.changed = true;
                 }
@@ -161,8 +171,15 @@ const strToStrVtable = Value.VTable{
     }.tn,
     .deinit = struct {
         fn di(ptr: *anyopaque, gpa: std.mem.Allocator) void {
-            _ = ptr;
-            _ = gpa;
+            const state: *StringToStringState = @ptrCast(@alignCast(ptr));
+            if (state.changed) {
+                var it = state.value.iterator();
+                while (it.next()) |entry| {
+                    gpa.free(entry.key_ptr.*);
+                    gpa.free(entry.value_ptr.*);
+                }
+            }
+            state.value.deinit(gpa);
         }
     }.di,
 };

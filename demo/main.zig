@@ -32,7 +32,6 @@ pub fn main(init: std.process.Init) !void {
     try fs.durationVar(&timeout, "timeout", 0, "timeout (30s/5m/2h/1d)");
 
     var tags: std.ArrayListUnmanaged([]const u8) = .empty;
-    defer tags.deinit(gpa);
     tags.append(gpa, "default") catch {};
     var tags_state = pflag.StringSliceState{ .value = &tags, .gpa = gpa };
     try fs.stringSliceVarP(&tags_state, "tag", "t", &.{}, "tags (repeatable)");
