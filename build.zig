@@ -54,4 +54,30 @@ pub fn build(b: *std.Build) void {
     }
     const run_demo_step = b.step("run-demo", "Run the zig-pflag demo");
     run_demo_step.dependOn(&run_demo.step);
+
+    // ── Allocator examples (N types × M allocators) ──
+    const example_names = [_][]const u8{
+        "int_gpa",         "int_arena",         "int_page",         "int_fba",
+        "string_gpa",      "string_arena",      "string_page",      "string_fba",
+        "float_slice_gpa", "float_slice_arena", "float_slice_page", "float_slice_fba",
+    };
+
+    const build_examples_step = b.step("build-examples", "Build all allocator examples (3 types × 4 allocators = 12 exes)");
+
+    for (example_names) |name| {
+        const exe_mod = b.createModule(.{
+            .root_source_file = b.path(b.fmt("examples/{s}.zig", .{name})),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "pflag", .module = lib_mod },
+            },
+        });
+        const exe = b.addExecutable(.{
+            .name = b.fmt("example-{s}", .{name}),
+            .root_module = exe_mod,
+        });
+        const install_exe = b.addInstallArtifact(exe, .{});
+        build_examples_step.dependOn(&install_exe.step);
+    }
 }
