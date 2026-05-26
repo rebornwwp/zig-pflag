@@ -33,7 +33,7 @@ pub fn build(b: *std.Build) void {
 
     // ── Demo executable ──
     const demo_mod = b.createModule(.{
-        .root_source_file = b.path("demo/main.zig"),
+        .root_source_file = b.path("examples/demo.zig"),
         .target = target,
         .optimize = optimize,
         .imports = &.{
