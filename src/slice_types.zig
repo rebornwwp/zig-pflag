@@ -20,30 +20,19 @@ pub fn SliceState(comptime T: type) type {
 
 /// Wrapper struct to track changed state for string slice values.
 /// First Set replaces defaults; subsequent Sets append.
+///
+/// changed flag: tracks whether set() has been called at least once.
+/// Before the first Set, the slice contains user-provided defaults whose
+/// string pointers may be string literals (non-heap) — the library must NOT
+/// free them. After the first Set, all entries are created by the library
+/// via gpa.dupe(), so deinit() conditionally frees each string only when
+/// changed == true. The container (ArrayListUnmanaged backing array) is
+/// always freed via state.value.deinit(gpa).
 pub const StringSliceState = struct {
     value: *std.ArrayListUnmanaged([]const u8),
     gpa: std.mem.Allocator,
     changed: bool = false,
 };
-
-/// Parse a CSV string into a list of strings.
-fn parseCsv(gpa: std.mem.Allocator, input: []const u8) ![][]const u8 {
-    if (input.len == 0) {
-        var empty: std.ArrayListUnmanaged([]const u8) = .empty;
-        return empty.toOwnedSlice(gpa);
-    }
-    var result: std.ArrayListUnmanaged([]const u8) = .empty;
-    errdefer {
-        for (result.items) |item| gpa.free(item);
-        result.deinit(gpa);
-    }
-    var it = std.mem.splitScalar(u8, input, ',');
-    while (it.next()) |part| {
-        const trimmed = std.mem.trim(u8, part, " \t");
-        try result.append(gpa, try gpa.dupe(u8, trimmed));
-    }
-    return result.toOwnedSlice(gpa);
-}
 
 const stringSliceVtable = Value.VTable{
     .set = struct {
@@ -51,18 +40,26 @@ const stringSliceVtable = Value.VTable{
             const state: *StringSliceState = @ptrCast(@alignCast(ptr));
             const slice = state.value;
             const gpa = state.gpa;
-            const parsed = try parseCsv(gpa, v);
-            defer {
-                for (parsed) |item| gpa.free(item);
-                gpa.free(parsed);
-            }
             if (!state.changed) {
                 slice.clearRetainingCapacity();
             }
-            for (parsed) |item| {
-                try slice.append(gpa, try gpa.dupe(u8, item));
+            const items_before = slice.items.len;
+            errdefer {
+                // Free items appended during this call on error
+                for (slice.items[items_before..]) |item| gpa.free(item);
+                slice.shrinkRetainingCapacity(items_before);
             }
-            state.changed = true;
+            var it = std.mem.splitScalar(u8, v, ',');
+            while (it.next()) |part| {
+                const trimmed = std.mem.trim(u8, part, " \t");
+                const item = try gpa.dupe(u8, trimmed);
+                // Catch: dupe succeeded but append may fail — free item to avoid leak
+                slice.append(gpa, item) catch |err| {
+                    gpa.free(item);
+                    return err;
+                };
+            }
+            if (!state.changed) state.changed = true;
         }
     }.set,
     .string = struct {
@@ -99,17 +96,15 @@ pub fn stringSliceValue(state: *StringSliceState) Value {
 
 // ─── String Array ───
 
-/// Wrapper struct to track changed state for string array values.
-pub const StringArrayState = struct {
-    value: *std.ArrayListUnmanaged([]const u8),
-    gpa: std.mem.Allocator,
-    changed: bool = false,
-};
+/// Type alias for string array values.
+/// StringArray reuses StringSliceState; only the VTable set() differs
+/// (append-only vs CSV-replace semantics).
+pub const StringArrayState = StringSliceState;
 
 const stringArrayVtable = Value.VTable{
     .set = struct {
         fn set(ptr: *anyopaque, v: []const u8) !void {
-            const state: *StringArrayState = @ptrCast(@alignCast(ptr));
+            const state: *StringSliceState = @ptrCast(@alignCast(ptr));
             const slice = state.value;
             const gpa = state.gpa;
             if (!state.changed) {
@@ -121,7 +116,7 @@ const stringArrayVtable = Value.VTable{
     }.set,
     .string = struct {
         fn string(ptr: *anyopaque, gpa: std.mem.Allocator) anyerror![]const u8 {
-            const state: *StringArrayState = @ptrCast(@alignCast(ptr));
+            const state: *StringSliceState = @ptrCast(@alignCast(ptr));
             const slice = state.value;
             var buf: std.ArrayListUnmanaged(u8) = .empty;
             for (slice.items, 0..) |s, i| {
@@ -138,7 +133,7 @@ const stringArrayVtable = Value.VTable{
     }.tn,
     .deinit = struct {
         fn di(ptr: *anyopaque, gpa: std.mem.Allocator) void {
-            const state: *StringArrayState = @ptrCast(@alignCast(ptr));
+            const state: *StringSliceState = @ptrCast(@alignCast(ptr));
             if (state.changed) {
                 for (state.value.items) |s| gpa.free(s);
             }
@@ -147,7 +142,7 @@ const stringArrayVtable = Value.VTable{
     }.di,
 };
 
-pub fn stringArrayValue(state: *StringArrayState) Value {
+pub fn stringArrayValue(state: *StringSliceState) Value {
     return .{ .ptr = @ptrCast(@alignCast(state)), .vtable = &stringArrayVtable };
 }
 

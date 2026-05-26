@@ -8,6 +8,13 @@ const Value = pflag.Value;
 
 /// Wrapper struct to track changed state for StringToInt map values.
 /// First Set replaces defaults; subsequent Sets merge.
+///
+/// changed flag: tracks whether set() has been called at least once.
+/// Before the first Set, the map contains user-provided defaults whose
+/// key pointers may be string literals (non-heap) — the library must NOT
+/// free them. After the first Set, all entries are created by the library
+/// via gpa.dupe(), so deinit() conditionally frees keys only when
+/// changed == true.
 pub fn StringToIntState(comptime T: type) type {
     return struct {
         value: *std.StringHashMapUnmanaged(T),
@@ -37,7 +44,6 @@ fn strToIntVtableGen(comptime T: type) Value.VTable {
                         // First Set: defaults may have literal (non-owned) keys,
                         // so do NOT free them — just clear the backing storage.
                         map.clearRetainingCapacity();
-                        state.changed = true;
                     }
                     // If key already in map (duped), replace value in place so we
                     // don't leak the new duped key (put doesn't overwrite the key pointer).
@@ -47,7 +53,9 @@ fn strToIntVtableGen(comptime T: type) Value.VTable {
                     } else {
                         try map.put(gpa, key, val);
                     }
+                    if (!state.changed) state.changed = true;
                 }
+                // changed flag also covers the empty-input case
                 if (!state.changed) state.changed = true;
             }
         }.set,
@@ -109,6 +117,13 @@ pub fn stringToIntValue(comptime T: type, state: *StringToIntState(T)) Value {
 
 /// Wrapper struct to track changed state for StringToString map values.
 /// First Set replaces defaults; subsequent Sets merge.
+///
+/// changed flag: tracks whether set() has been called at least once.
+/// Before the first Set, the map contains user-provided defaults whose
+/// key/value pointers may be string literals (non-heap) — the library must
+/// NOT free them. After the first Set, all entries are created by the library
+/// via gpa.dupe(), so deinit() conditionally frees both keys and values only
+/// when changed == true.
 pub const StringToStringState = struct {
     value: *std.StringHashMapUnmanaged([]const u8),
     gpa: std.mem.Allocator,
@@ -128,12 +143,12 @@ const strToStrVtable = Value.VTable{
                 if (trimmed.len == 0) continue;
                 const eq = std.mem.indexOfScalar(u8, trimmed, '=') orelse return error.ExpectedKeyValue;
                 const key = try gpa.dupe(u8, trimmed[0..eq]);
+                errdefer gpa.free(key);
                 const val = try gpa.dupe(u8, trimmed[eq + 1 ..]);
                 if (!state.changed) {
                     // First Set: defaults may have literal (non-owned) keys/values,
                     // so do NOT free them — just clear the backing storage.
                     map.clearRetainingCapacity();
-                    state.changed = true;
                 }
                 // If key already exists, free old value
                 if (map.getEntry(key)) |entry| {
@@ -143,7 +158,9 @@ const strToStrVtable = Value.VTable{
                 } else {
                     try map.put(gpa, key, val);
                 }
+                if (!state.changed) state.changed = true;
             }
+            // changed flag also covers the empty-input case
             if (!state.changed) state.changed = true;
         }
     }.set,
