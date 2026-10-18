@@ -2,6 +2,16 @@
 
 All notable changes to zig-pflag will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- **Minimum Zig version is now 0.17.0** (tagged `v0.16.0` marks the last Zig 0.16.x release)
+- Build system: `if (b.args) |args| run.addArgs(args)` replaced with `run.addPassthruArgs()` (Zig 0.17 build system maker/configurer separation)
+- `std.fmt.allocPrint(gpa, ...)` replaced with `gpa.print(...)` (moved to `std.mem.Allocator` in Zig 0.17)
+- `gpa` examples migrated from deprecated `std.heap.DebugAllocator` to thread-safe `std.heap.SafeAllocator`
+- `build.zig.zon`: `minimum_zig_version` bumped to `0.17.0`
+
 ## [0.1.0] - 2026-05-24
 
 ### Added

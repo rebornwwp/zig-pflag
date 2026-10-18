@@ -62,13 +62,13 @@ pub fn parseDuration(s: []const u8) !i64 {
 }
 
 pub fn formatDuration(ns: i64, gpa: std.mem.Allocator) ![]const u8 {
-    if (@rem(ns, std.time.ns_per_day) == 0) return std.fmt.allocPrint(gpa, "{d}d", .{@divFloor(ns, std.time.ns_per_day)});
-    if (@rem(ns, std.time.ns_per_hour) == 0) return std.fmt.allocPrint(gpa, "{d}h", .{@divFloor(ns, std.time.ns_per_hour)});
-    if (@rem(ns, std.time.ns_per_min) == 0) return std.fmt.allocPrint(gpa, "{d}m", .{@divFloor(ns, std.time.ns_per_min)});
-    if (@rem(ns, std.time.ns_per_s) == 0) return std.fmt.allocPrint(gpa, "{d}s", .{@divFloor(ns, std.time.ns_per_s)});
-    if (@rem(ns, std.time.ns_per_ms) == 0) return std.fmt.allocPrint(gpa, "{d}ms", .{@divFloor(ns, std.time.ns_per_ms)});
-    if (@rem(ns, std.time.ns_per_us) == 0) return std.fmt.allocPrint(gpa, "{d}us", .{@divFloor(ns, std.time.ns_per_us)});
-    return std.fmt.allocPrint(gpa, "{d}ns", .{ns});
+    if (@rem(ns, std.time.ns_per_day) == 0) return gpa.print("{d}d", .{@divFloor(ns, std.time.ns_per_day)});
+    if (@rem(ns, std.time.ns_per_hour) == 0) return gpa.print("{d}h", .{@divFloor(ns, std.time.ns_per_hour)});
+    if (@rem(ns, std.time.ns_per_min) == 0) return gpa.print("{d}m", .{@divFloor(ns, std.time.ns_per_min)});
+    if (@rem(ns, std.time.ns_per_s) == 0) return gpa.print("{d}s", .{@divFloor(ns, std.time.ns_per_s)});
+    if (@rem(ns, std.time.ns_per_ms) == 0) return gpa.print("{d}ms", .{@divFloor(ns, std.time.ns_per_ms)});
+    if (@rem(ns, std.time.ns_per_us) == 0) return gpa.print("{d}us", .{@divFloor(ns, std.time.ns_per_us)});
+    return gpa.print("{d}ns", .{ns});
 }
 
 pub fn durationValue(val: i64, p: *i64) Value {

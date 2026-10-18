@@ -32,7 +32,7 @@ fn countSetFn(ptr: *anyopaque, v: []const u8) !void {
 }
 fn countStrFn(ptr: *anyopaque, gpa: std.mem.Allocator) anyerror![]const u8 {
     const p: *i32 = @ptrCast(@alignCast(ptr));
-    return std.fmt.allocPrint(gpa, "{d}", .{p.*});
+    return gpa.print("{d}", .{p.*});
 }
 
 pub fn countValue(val: i32, p: *i32) Value {

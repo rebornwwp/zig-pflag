@@ -1,9 +1,9 @@
-//! Example: int (i32) flag with GeneralPurposeAllocator.
+//! Example: int (i32) flag with SafeAllocator.
 const std = @import("std");
 const pflag = @import("pflag");
 
 pub fn main() !void {
-    var gpa_state = std.heap.DebugAllocator(.{}){};
+    var gpa_state: std.heap.SafeAllocator = .init(std.heap.page_allocator, .{});
     defer _ = gpa_state.deinit();
     const alloc = gpa_state.allocator();
 

@@ -30,7 +30,7 @@ fn intStrFn(comptime T: type) *const fn (*anyopaque, std.mem.Allocator) anyerror
     return struct {
         fn str(ptr: *anyopaque, gpa: std.mem.Allocator) anyerror![]const u8 {
             const p: *T = @ptrCast(@alignCast(ptr));
-            return std.fmt.allocPrint(gpa, "{d}", .{p.*});
+            return gpa.print("{d}", .{p.*});
         }
     }.str;
 }

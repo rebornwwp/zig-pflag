@@ -49,9 +49,7 @@ pub fn build(b: *std.Build) void {
 
     const run_demo = b.addRunArtifact(demo_exe);
     run_demo.step.dependOn(&install_demo.step);
-    if (b.args) |args| {
-        run_demo.addArgs(args);
-    }
+    run_demo.addPassthruArgs();
     const run_demo_step = b.step("run-demo", "Run the zig-pflag demo");
     run_demo_step.dependOn(&run_demo.step);
 
@@ -73,9 +71,7 @@ pub fn build(b: *std.Build) void {
 
     const run_struct = b.addRunArtifact(struct_exe);
     run_struct.step.dependOn(&install_struct.step);
-    if (b.args) |args| {
-        run_struct.addArgs(args);
-    }
+    run_struct.addPassthruArgs();
     const run_struct_step = b.step("run-struct-config", "Run the struct config example");
     run_struct_step.dependOn(&run_struct.step);
 

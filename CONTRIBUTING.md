@@ -9,7 +9,7 @@ licensed under the BSD 3-Clause License that covers this project.
 
 ## Prerequisites
 
-- [Zig 0.16.0](https://ziglang.org/download/)
+- [Zig 0.17.0](https://ziglang.org/download/)
 
 ## Development
 
@@ -29,7 +29,7 @@ zig build run-demo -- -v --name=zig --count=42
 
 ## Code Style
 
-- **Zig 0.16.0** standard library conventions
+- **Zig 0.17.0** standard library conventions
 - `zig fmt` for automatic formatting — no manual style decisions
 - Comptime generics preferred over code duplication for type families
 - Cross-platform: no OS-specific APIs (no `std.os.linux.*`)

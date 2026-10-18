@@ -4,7 +4,7 @@
 
 POSIX/GNU-style flag parsing for Zig, ported from Go's [spf13/pflag](https://github.com/spf13/pflag) v1.0.9.
 
-Zig 0.16.0 · 12 source files · ~2500 lines · 110 tests
+Zig 0.17.0 · 12 source files · ~2500 lines · 110 tests
 
 ## Installation
 
