@@ -30,6 +30,8 @@ zig test --dep pflag -Mroot=src/pflag_test.zig -Mpflag=src/pflag.zig
 
 `.github/workflows/ci.yml` 在 ubuntu + macos 上跑 Zig **0.17.0**,顺序为:fmt → test → build-examples → build。这个 matrix 版本必须和 `build.zig.zon` 的 `minimum_zig_version` 保持同步——升级 Zig 版本时两处都要改,否则 CI 会以旧版本编译新代码而失败。
 
+装 Zig 用的是 `mlugg/setup-zig@v2`。**不要改回 `goto-bus-stop/setup-zig`**:它已标记为 legacy,在 ubuntu 上装 0.17.0 会失败(其描述本身就指向 mlugg)。
+
 ## 架构
 
 文件布局镜像 Go pflag:
