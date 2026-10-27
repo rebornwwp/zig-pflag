@@ -9,12 +9,14 @@ zig-pflag:Go [spf13/pflag v1.0.9](https://github.com/spf13/pflag) 的 Zig 移植
 ## 命令
 
 ```bash
-zig build test                              # 跑全部 110 个测试(唯一测试入口)
+zig build test                              # 跑全部 208 个测试(唯一测试入口)
 zig build test --summary all                # 逐条列出测试名
-zig build build-examples                    # 编译 13 个示例(demo 由 zig build 单独编译)
+zig build build-examples                    # 编译 14 个示例(demo 由 zig build 单独编译)
 zig build                                   # 编译库 + demo
 zig build run-demo -- -v --count=42         # -- 后的参数透传给 demo
 zig build run-struct-config -- --port=3000  # struct 字段绑定示例
+zig build run-examples                      # 运行全部 12 个分配器示例
+zig build run-int_gpa                       # 运行单个示例(每个示例都有 run-<name> 步骤)
 zig fmt --check src/ examples/ build.zig    # CI 的格式检查(范围不含根目录其他文件)
 ```
 
@@ -38,7 +40,7 @@ zig test --dep pflag -Mroot=src/pflag_test.zig -Mpflag=src/pflag.zig
 
 - `src/pflag.zig`(~770 行):全部核心 —— `Value` 接口(ptr + vtable)、`Flag`、`FlagSet`、`--long`/`-s` 解析引擎(`parseArgLoop`)、usage 格式化。其余文件都是 `Value` 的具体实现。
 - `src/*_types.zig`(9 个):每种 flag 类型一个文件,暴露 `xxxValue(...)` 构造函数,全部 comptime 泛型(`intVar(T)` 等)。
-- `src/pflag_test.zig`:全部 110 个测试,单文件。新增 flag 类型的测试加在这里。
+- `src/pflag_test.zig`:全部 208 个测试,单文件。新增 flag 类型的测试加在这里。
 - `examples/`:`demo.zig`(14 个文件之一,由 `zig build` 编译)、`struct_config.zig`,以及"3 类型(int/string/floatSlice)× 4 分配器(GPA/Arena/Page/FBA)"矩阵。改分配器相关代码时矩阵里的四个都要能编译。
 
 ### 加一种新 flag 类型

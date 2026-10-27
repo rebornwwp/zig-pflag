@@ -4,6 +4,17 @@ All notable changes to zig-pflag will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- `zig build run-examples` step to run all 12 allocator examples at once
+- Individual `zig build run-<name>` steps for each allocator example (e.g., `run-int_gpa`, `run-string_arena`)
+- 98 new tests (110 → 208 total) covering:
+  - Complete slice type test suites (int32/int64/uint/float32/float64/bool/int/string_slice/string_array)
+  - Error path tests (invalid values, overflow, unknown flags)
+  - Boundary condition tests (empty values, Unicode, negative numbers, scientific notation)
+  - Integration tests (mixed flag types, real-world scenarios)
+  - Remaining Go pflag tests (BoolP, StringSlice, StringArray, Usage formatting)
+
 ### Changed
 
 - **Minimum Zig version is now 0.17.0** (tagged `v0.16.0` marks the last Zig 0.16.x release)
