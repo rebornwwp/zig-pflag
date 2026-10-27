@@ -80,10 +80,10 @@ pub fn build(b: *std.Build) void {
         "int_gpa",         "int_arena",         "int_page",         "int_fba",
         "string_gpa",      "string_arena",      "string_page",      "string_fba",
         "float_slice_gpa", "float_slice_arena", "float_slice_page", "float_slice_fba",
-        "struct_config",
     };
 
     const build_examples_step = b.step("build-examples", "Build all allocator examples (3 types × 4 allocators = 12 exes)");
+    const run_all_examples_step = b.step("run-examples", "Run all allocator examples");
 
     for (example_names) |name| {
         const exe_mod = b.createModule(.{
@@ -100,5 +100,12 @@ pub fn build(b: *std.Build) void {
         });
         const install_exe = b.addInstallArtifact(exe, .{});
         build_examples_step.dependOn(&install_exe.step);
+
+        // Add run step for each example
+        const run_exe = b.addRunArtifact(exe);
+        run_exe.step.dependOn(&install_exe.step);
+        const run_step = b.step(b.fmt("run-{s}", .{name}), b.fmt("Run the {s} example", .{name}));
+        run_step.dependOn(&run_exe.step);
+        run_all_examples_step.dependOn(&run_exe.step);
     }
 }
