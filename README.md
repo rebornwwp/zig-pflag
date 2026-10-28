@@ -8,41 +8,15 @@ Zig 0.17.0 · 12 source files · ~2500 lines · 208 tests
 
 ## Installation
 
-### Step 1 — Add dependency to `build.zig.zon`
-
-```zig
-.{
-    .name = "myapp",
-    .version = "0.1.0",
-    .dependencies = .{
-        .pflag = .{
-            .url = "https://github.com/rebornwwp/zig-pflag/archive/main.tar.gz",
-        },
-    },
-    .paths = .{...},
-}
-```
-
-### Step 2 — Get the hash
-
-The Zig package manager requires a content hash for integrity verification. Leave the `.hash` field **empty** first, run `zig build`, and the build system will error with the correct hash — copy and paste it.
+Add the dependency with one command:
 
 ```bash
-zig build
-# Example output:
-# error: hash mismatch:
-#   expected: 1220ec9ef11e590d3e28bb0ff9024de7da5a7e95e01e7506ec1a38c7e3a3f4e2e77e
+zig fetch --save git+https://github.com/rebornwwp/zig-pflag.git
 ```
 
-Or use `zig fetch` to get it directly:
+This automatically adds `pflag` to your `build.zig.zon` dependencies and fetches the module.
 
-```bash
-zig fetch https://github.com/rebornwwp/zig-pflag/archive/main.tar.gz
-```
-
-Copy the output hash into the `.hash` field.
-
-### Step 3 — Import the module in `build.zig`
+Then import it in `build.zig`:
 
 ```zig
 pub fn build(b: *std.Build) void {
@@ -66,7 +40,7 @@ pub fn build(b: *std.Build) void {
 }
 ```
 
-Then use `const pflag = @import("pflag");` in your code.
+Use `const pflag = @import("pflag");` in your code.
 
 ## Quick Start
 

@@ -4,45 +4,19 @@
 
 Zig 的 POSIX/GNU 风格命令行参数解析库，从 Go 的 [spf13/pflag](https://github.com/spf13/pflag) v1.0.9 移植而来。
 
-Zig 0.17.0 · 12 个源文件 · ~2500 行代码 · 110 个测试
+Zig 0.17.0 · 12 个源文件 · ~2500 行代码 · 208 个测试
 
 ## 安装
 
-### 步骤 1 — 在 `build.zig.zon` 中添加依赖
-
-```zig
-.{
-    .name = "myapp",
-    .version = "0.1.0",
-    .dependencies = .{
-        .pflag = .{
-            .url = "https://github.com/rebornwwp/zig-pflag/archive/main.tar.gz",
-        },
-    },
-    .paths = .{...},
-}
-```
-
-### 步骤 2 — 获取 hash 值
-
-Zig 包管理器需要文件的完整性校验 hash。先**不填** `.hash` 字段，运行 `zig build`，构建系统会报错并给出正确的 hash 值，复制粘贴即可。
+一行命令添加依赖：
 
 ```bash
-zig build
-# 输出示例：
-# error: hash mismatch:
-#   expected: 1220ec9ef11e590d3e28bb0ff9024de7da5a7e95e01e7506ec1a38c7e3a3f4e2e77e
+zig fetch --save git+https://github.com/rebornwwp/zig-pflag.git
 ```
 
-或者用 `zig fetch` 直接获取：
+这会自动将 `pflag` 添加到 `build.zig.zon` 的依赖中并获取模块。
 
-```bash
-zig fetch https://github.com/rebornwwp/zig-pflag/archive/main.tar.gz
-```
-
-将输出的 hash 填入 `.hash` 字段。
-
-### 步骤 3 — 在 `build.zig` 中引入模块
+然后在 `build.zig` 中引入：
 
 ```zig
 pub fn build(b: *std.Build) void {
@@ -66,7 +40,7 @@ pub fn build(b: *std.Build) void {
 }
 ```
 
-之后在代码中直接 `const pflag = @import("pflag");` 即可使用。
+在代码中使用 `const pflag = @import("pflag");` 即可。
 
 ## 快速开始
 
