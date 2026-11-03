@@ -548,12 +548,11 @@ pub const FlagSet = struct {
         }
 
         if (!has_value) {
-            if (std.mem.eql(u8, f.no_opt_def_val, "true")) {
+            if (f.no_opt_def_val.len > 0) {
+                // Flag has a default value for when no option is provided (bool=true, count=+1)
                 value = f.no_opt_def_val;
             } else if (remaining.items.len > 0) {
                 value = remaining.orderedRemove(0);
-            } else if (f.no_opt_def_val.len > 0) {
-                value = f.no_opt_def_val;
             } else return self.doFailWith(.value_required, f.name, error.ValueRequired);
         }
         try applyValue(self, f, value);

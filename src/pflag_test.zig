@@ -576,6 +576,66 @@ test "CountVar explicit value assigns not accumulates" {
     try testing.expectEqual(@as(i32, 5), c);
 }
 
+test "CountVar empty args keeps default" {
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    var c: i32 = 0;
+    try fs.countVarP(&c, "verbose", "v", 0, "");
+    try fs.parse(&.{});
+
+    try testing.expectEqual(@as(i32, 0), c);
+}
+
+test "CountVar single short flag" {
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    var c: i32 = 0;
+    try fs.countVarP(&c, "verbose", "v", 0, "");
+    try fs.parse(&.{"-v"});
+
+    try testing.expectEqual(@as(i32, 1), c);
+}
+
+test "CountVar combined short flags -vvv" {
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    var c: i32 = 0;
+    try fs.countVarP(&c, "verbose", "v", 0, "");
+    try fs.parse(&.{"-vvv"});
+
+    try testing.expectEqual(@as(i32, 3), c);
+}
+
+test "CountVar mixed long and short flags" {
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    fs.error_handling = .continue_on_error;
+    var c: i32 = 0;
+    try fs.countVarP(&c, "verbose", "v", 0, "");
+    try fs.parse(&.{ "-v", "--verbose", "-v" });
+
+    try testing.expectEqual(@as(i32, 3), c);
+}
+
+test "CountVar explicit value with short flag -v=0" {
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    var c: i32 = 0;
+    try fs.countVarP(&c, "verbose", "v", 0, "");
+    try fs.parse(&.{"-v=0"});
+
+    try testing.expectEqual(@as(i32, 0), c);
+}
+
+test "CountVar invalid value returns error" {
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    fs.error_handling = .continue_on_error;
+    var c: i32 = 0;
+    try fs.countVarP(&c, "verbose", "v", 0, "");
+    try testing.expectError(error.InvalidCharacter, fs.parse(&.{"-v=a"}));
+}
+
 // ── Duration flag ──
 
 test "DurationVar parses seconds" {
