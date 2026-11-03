@@ -62,3 +62,84 @@ pub fn intValue(comptime T: type, val: T, p: *T) Value {
     };
     return .{ .ptr = p, .vtable = vt };
 }
+
+
+// ── Tests ──
+
+test "IntVar and parse" {
+    var fs = pflag.FlagSet.init(std.std.testing.allocator, "test");
+    defer fs.deinit();
+    var count: i32 = 0;
+    try fs.intVar(i32, &count, "count", 0, "the count");
+    try fs.parse(&.{"--count=42"});
+    try std.std.testing.expectEqual(@as(i32, 42), count);
+}
+
+test "IntVar separate value" {
+    var fs = pflag.FlagSet.init(std.std.testing.allocator, "test");
+    defer fs.deinit();
+    var count: i32 = 0;
+    try fs.intVar(i32, &count, "count", 0, "the count");
+    try fs.parse(&.{ "--count", "99" });
+    try std.std.testing.expectEqual(@as(i32, 99), count);
+}
+
+test "IntVar different types" {
+    var fs = pflag.FlagSet.init(std.std.testing.allocator, "test");
+    defer fs.deinit();
+    var a: i8 = 0;
+    var b: i64 = 0;
+    try fs.intVar(i8, &a, "a", 0, "");
+    try fs.intVar(i64, &b, "b", 0, "");
+    try fs.parse(&.{ "--a=127", "--b=9223372036854775807" });
+    try std.std.testing.expectEqual(@as(i8, 127), a);
+    try std.std.testing.expectEqual(@as(i64, 9223372036854775807), b);
+}
+
+test "Invalid int value returns error" {
+    var fs = pflag.FlagSet.init(std.std.testing.allocator, "test");
+    defer fs.deinit();
+    fs.error_handling = .continue_on_error;
+    var count: i32 = 0;
+    try fs.intVar(i32, &count, "count", 0, "");
+    const result = fs.parse(&.{"--count=abc"});
+    try std.std.testing.expectError(error.InvalidCharacter, result);
+}
+
+test "Int overflow returns error" {
+    var fs = pflag.FlagSet.init(std.std.testing.allocator, "test");
+    defer fs.deinit();
+    fs.error_handling = .continue_on_error;
+    var count: i8 = 0;
+    try fs.intVar(i8, &count, "count", 0, "");
+    const result = fs.parse(&.{"--count=999"});
+    try std.std.testing.expectError(error.Overflow, result);
+}
+
+test "Zero value for int" {
+    var fs = pflag.FlagSet.init(std.std.testing.allocator, "test");
+    defer fs.deinit();
+    var count: i32 = 99;
+    try fs.intVar(i32, &count, "count", 99, "");
+    try fs.parse(&.{"--count=0"});
+    try std.std.testing.expectEqual(@as(i32, 0), count);
+}
+
+test "Negative int value" {
+    var fs = pflag.FlagSet.init(std.std.testing.allocator, "test");
+    defer fs.deinit();
+    var count: i32 = 0;
+    try fs.intVar(i32, &count, "count", 0, "");
+    try fs.parse(&.{"--count=-42"});
+    try std.std.testing.expectEqual(@as(i32, -42), count);
+}
+
+test "Very large int64 value" {
+    var fs = pflag.FlagSet.init(std.std.testing.allocator, "test");
+    defer fs.deinit();
+    var count: i64 = 0;
+    try fs.intVar(i64, &count, "count", 0, "");
+    try fs.parse(&.{"--count=9223372036854775807"});
+    try std.std.testing.expectEqual(@as(i64, 9223372036854775807), count);
+}
+

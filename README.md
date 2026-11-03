@@ -399,7 +399,16 @@ src/
 ├── duration_types.zig # Duration type (s/m/h/d)
 ├── slice_types.zig    # string/int/uint/bool/float slices
 ├── map_types.zig      # string→int, string→string maps
-└── pflag_test.zig     # 208 tests
+├── pflag_test.zig     # 92 core FlagSet tests
+├── bool_types.zig     # bool + 10 tests
+├── int_types.zig      # int + 8 tests
+├── uint_types.zig     # uint + 5 tests
+├── float_types.zig    # float + 5 tests
+├── count_types.zig    # count + 10 tests
+├── duration_types.zig # duration + 8 tests
+├── string_types.zig   # string + 7 tests
+├── slice_types.zig    # slice/array + 47 tests
+└── map_types.zig      # map + 22 tests
 
 examples/
 ├── demo.zig           # Full demo (all flag types)

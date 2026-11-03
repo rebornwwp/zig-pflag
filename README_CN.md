@@ -399,7 +399,16 @@ src/
 ├── duration_types.zig # Duration 类型（s/m/h/d）
 ├── slice_types.zig    # string/int/uint/bool/float 切片
 ├── map_types.zig      # string→int、string→string map
-└── pflag_test.zig     # 110 个测试
+├── pflag_test.zig     # 92 个核心 FlagSet 测试
+├── bool_types.zig     # bool + 10 个测试
+├── int_types.zig      # int + 8 个测试
+├── uint_types.zig     # uint + 5 个测试
+├── float_types.zig    # float + 5 个测试
+├── count_types.zig    # count + 10 个测试
+├── duration_types.zig # duration + 8 个测试
+├── string_types.zig   # string + 7 个测试
+├── slice_types.zig    # slice/array + 47 个测试
+└── map_types.zig      # map + 22 个测试
 
 examples/
 ├── demo.zig           # 完整示例（所有参数类型）

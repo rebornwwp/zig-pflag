@@ -40,7 +40,7 @@ zig test --dep pflag -Mroot=src/pflag_test.zig -Mpflag=src/pflag.zig
 
 - `src/pflag.zig`(~770 行):全部核心 —— `Value` 接口(ptr + vtable)、`Flag`、`FlagSet`、`--long`/`-s` 解析引擎(`parseArgLoop`)、usage 格式化。其余文件都是 `Value` 的具体实现。
 - `src/*_types.zig`(9 个):每种 flag 类型一个文件,暴露 `xxxValue(...)` 构造函数,全部 comptime 泛型(`intVar(T)` 等)。
-- `src/pflag_test.zig`:全部 208 个测试,单文件。新增 flag 类型的测试加在这里。
+- `src/pflag_test.zig`:核心 FlagSet 测试(92 个)。类型特定测试分散在各自的 `*_types.zig` 文件中。新增 flag 类型的测试应加在对应的类型文件中。
 - `examples/`:`demo.zig`(14 个文件之一,由 `zig build` 编译)、`struct_config.zig`,以及"3 类型(int/string/floatSlice)× 5 分配器(GPA/Arena/Page/FBA/c_allocator)"矩阵。改分配器相关代码时矩阵里的五个都要能编译。
 
 ### 加一种新 flag 类型

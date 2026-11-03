@@ -85,3 +85,76 @@ fn stringSetFnLegacy(ptr: *anyopaque, v: []const u8) !void {
 fn stringStrFnLegacy(ptr: *anyopaque, gpa: std.mem.Allocator) anyerror![]const u8 {
     return gpa.dupe(u8, (@as(*[]const u8, @ptrCast(@alignCast(ptr)))).*);
 }
+
+
+// ── Tests ──
+
+test "StringVar and parse" {
+    var fs = pflag.FlagSet.init(std.std.testing.allocator, "test");
+    defer fs.deinit();
+    var name: []const u8 = "";
+    try fs.stringVar(&name, "name", "default", "your name");
+    try fs.parse(&.{"--name=Alice"});
+    try std.std.std.testing.expectEqualStrings("Alice", name);
+}
+
+test "StringVar shorthand" {
+    var fs = pflag.FlagSet.init(std.std.testing.allocator, "test");
+    defer fs.deinit();
+    var name: []const u8 = "";
+    try fs.stringVarP(&name, "name", "n", "default", "your name");
+    try fs.parse(&.{ "-n", "Bob" });
+    try std.std.std.testing.expectEqualStrings("Bob", name);
+}
+
+test "StringToStringVar supports CSV format" {
+    var fs = pflag.FlagSet.init(std.std.testing.allocator, "test");
+    defer fs.deinit();
+    fs.error_handling = .continue_on_error;
+    var map: std.StringHashMapUnmanaged([]const u8) = .empty;
+    var state = pflag.StringToStringState{ .value = &map, .gpa = std.testing.allocator };
+    try fs.stringToStringVar(&state, "labels", "", "");
+    try fs.parse(&.{"--labels=a=1,b=2,c=3"});
+    try std.std.testing.expectEqual(@as(u32, 3), map.count());
+    try std.std.std.testing.expectEqualStrings("1", map.get("a").?);
+    try std.std.std.testing.expectEqualStrings("2", map.get("b").?);
+    try std.std.std.testing.expectEqualStrings("3", map.get("c").?);
+}
+
+test "StringStateVar copies input on set" {
+    var fs = pflag.FlagSet.init(std.std.testing.allocator, "test");
+    defer fs.deinit();
+    var name: []const u8 = "";
+    var state = pflag.StringState{ .value = &name, .gpa = std.testing.allocator };
+    try fs.stringStateVar(&state, "name", "", "");
+    try fs.parse(&.{"--name=copied"});
+    try std.std.std.testing.expectEqualStrings("copied", name);
+}
+
+test "Empty string value is valid" {
+    var fs = pflag.FlagSet.init(std.std.testing.allocator, "test");
+    defer fs.deinit();
+    var name: []const u8 = "default";
+    try fs.stringVar(&name, "name", "default", "");
+    try fs.parse(&.{"--name="});
+    try std.std.std.testing.expectEqualStrings("", name);
+}
+
+test "Unicode string value" {
+    var fs = pflag.FlagSet.init(std.std.testing.allocator, "test");
+    defer fs.deinit();
+    var name: []const u8 = "";
+    try fs.stringVar(&name, "name", "", "");
+    try fs.parse(&.{"--name=你好世界"});
+    try std.std.std.testing.expectEqualStrings("你好世界", name);
+}
+
+test "String with spaces" {
+    var fs = pflag.FlagSet.init(std.std.testing.allocator, "test");
+    defer fs.deinit();
+    var name: []const u8 = "";
+    try fs.stringVar(&name, "name", "", "");
+    try fs.parse(&.{"--name=hello world"});
+    try std.std.std.testing.expectEqualStrings("hello world", name);
+}
+
