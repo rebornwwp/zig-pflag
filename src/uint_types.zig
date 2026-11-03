@@ -64,54 +64,51 @@ pub fn uintValue(comptime T: type, val: T, p: *T) Value {
 }
 
 
+
 // ── Tests ──
 
-test "UintVar parses unsigned values" {
-    var fs = pflag.FlagSet.init(std.std.testing.allocator, "test");
-    defer fs.deinit();
-    var count: u32 = 0;
-    try fs.uintVar(u32, &count, "count", 0, "");
-    try fs.parse(&.{"--count=42"});
-    try std.std.testing.expectEqual(@as(u32, 42), count);
+test "UintVar" {
+    const TestCase = struct {
+        input: []const []const u8,
+        expected: u32,
+    };
+
+    const testCases = [_]TestCase{
+        .{ .input = &.{"--count=42"}, .expected = 42 },
+        .{ .input = &.{ "-p", "8080" }, .expected = 8080 },
+    };
+
+    for (testCases, 0..) |tc, i| {
+        var count: u32 = 0;
+        var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+        defer fs.deinit();
+        if (i == 0) {
+            try fs.uintVar(u32, &count, "count", 0, "");
+        } else {
+            try fs.uintVarP(u32, &count, "port", "p", 0, "");
+        }
+        try fs.parse(tc.input);
+        try std.testing.expectEqual(tc.expected, count);
+    }
 }
 
 test "UintVar different types" {
-    var fs = pflag.FlagSet.init(std.std.testing.allocator, "test");
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
     defer fs.deinit();
     var a: u8 = 0;
     var b: u64 = 0;
     try fs.uintVar(u8, &a, "a", 0, "");
     try fs.uintVar(u64, &b, "b", 0, "");
     try fs.parse(&.{ "--a=255", "--b=18446744073709551615" });
-    try std.std.testing.expectEqual(@as(u8, 255), a);
-    try std.std.testing.expectEqual(@as(u64, 18446744073709551615), b);
+    try std.testing.expectEqual(@as(u8, 255), a);
+    try std.testing.expectEqual(@as(u64, 18446744073709551615), b);
 }
 
 test "UintVar rejects negative values" {
-    var fs = pflag.FlagSet.init(std.std.testing.allocator, "test");
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
     defer fs.deinit();
     fs.error_handling = .continue_on_error;
     var count: u32 = 0;
     try fs.uintVar(u32, &count, "count", 0, "");
-    try std.std.testing.expectError(error.Overflow, fs.parse(&.{"--count=-1"}));
+    try std.testing.expectError(error.Overflow, fs.parse(&.{"--count=-1"}));
 }
-
-test "IntVar shorthand with uint" {
-    var fs = pflag.FlagSet.init(std.std.testing.allocator, "test");
-    defer fs.deinit();
-    var val: u16 = 0;
-    try fs.uintVarP(u16, &val, "port", "p", 0, "");
-    try fs.parse(&.{ "-p", "8080" });
-    try std.std.testing.expectEqual(@as(u16, 8080), val);
-}
-
-test "Negative uint value returns error" {
-    var fs = pflag.FlagSet.init(std.std.testing.allocator, "test");
-    defer fs.deinit();
-    fs.error_handling = .continue_on_error;
-    var port: u32 = 0;
-    try fs.uintVar(u32, &port, "port", 0, "");
-    const result = fs.parse(&.{"--port=-1"});
-    try std.std.testing.expectError(error.Overflow, result);
-}
-

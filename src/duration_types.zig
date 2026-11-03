@@ -77,85 +77,40 @@ pub fn durationValue(val: i64, p: *i64) Value {
 }
 
 
+
 // ── Tests ──
 
-test "DurationVar parses seconds" {
-    var fs = pflag.FlagSet.init(std.std.testing.allocator, "test");
-    defer fs.deinit();
-    var d: i64 = 0;
-    try fs.durationVar(&d, "timeout", 0, "");
-    try fs.parse(&.{"--timeout=30s"});
+test "DurationVar" {
+    const TestCase = struct {
+        input: []const u8,
+        expected: i64,
+    };
 
-    try std.std.testing.expectEqual(30 * std.time.ns_per_s, d);
+    const testCases = [_]TestCase{
+        .{ .input = "30s", .expected = 30 * std.time.ns_per_s },
+        .{ .input = "5m", .expected = 5 * std.time.ns_per_min },
+        .{ .input = "2h", .expected = 2 * std.time.ns_per_hour },
+        .{ .input = "1d", .expected = std.time.ns_per_day },
+        .{ .input = "500ms", .expected = 500 * std.time.ns_per_ms },
+        .{ .input = "100us", .expected = 100 * std.time.ns_per_us },
+        .{ .input = "200ns", .expected = 200 },
+    };
+
+    for (testCases) |tc| {
+        var d: i64 = 0;
+        var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+        defer fs.deinit();
+        try fs.durationVar(&d, "timeout", 0, "");
+        try fs.parse(&.{std.fmt.comptimePrint("--timeout={s}", .{tc.input})});
+        try std.testing.expectEqual(tc.expected, d);
+    }
 }
 
-test "DurationVar parses minutes" {
-    var fs = pflag.FlagSet.init(std.std.testing.allocator, "test");
-    defer fs.deinit();
-    var d: i64 = 0;
-    try fs.durationVar(&d, "timeout", 0, "");
-    try fs.parse(&.{"--timeout=5m"});
-
-    try std.std.testing.expectEqual(5 * std.time.ns_per_min, d);
-}
-
-test "DurationVar parses hours" {
-    var fs = pflag.FlagSet.init(std.std.testing.allocator, "test");
-    defer fs.deinit();
-    var d: i64 = 0;
-    try fs.durationVar(&d, "timeout", 0, "");
-    try fs.parse(&.{"--timeout=2h"});
-
-    try std.std.testing.expectEqual(2 * std.time.ns_per_hour, d);
-}
-
-test "DurationVar parses days" {
-    var fs = pflag.FlagSet.init(std.std.testing.allocator, "test");
-    defer fs.deinit();
-    var d: i64 = 0;
-    try fs.durationVar(&d, "timeout", 0, "");
-    try fs.parse(&.{"--timeout=1d"});
-
-    try std.std.testing.expectEqual(std.time.ns_per_day, d);
-}
-
-test "DurationVar parses milliseconds" {
-    var fs = pflag.FlagSet.init(std.std.testing.allocator, "test");
-    defer fs.deinit();
-    var d: i64 = 0;
-    try fs.durationVar(&d, "timeout", 0, "");
-    try fs.parse(&.{"--timeout=500ms"});
-
-    try std.std.testing.expectEqual(500 * std.time.ns_per_ms, d);
-}
-
-test "DurationVar parses microseconds" {
-    var fs = pflag.FlagSet.init(std.std.testing.allocator, "test");
-    defer fs.deinit();
-    var d: i64 = 0;
-    try fs.durationVar(&d, "timeout", 0, "");
-    try fs.parse(&.{"--timeout=100us"});
-
-    try std.std.testing.expectEqual(100 * std.time.ns_per_us, d);
-}
-
-test "DurationVar parses nanoseconds" {
-    var fs = pflag.FlagSet.init(std.std.testing.allocator, "test");
-    defer fs.deinit();
-    var d: i64 = 0;
-    try fs.durationVar(&d, "timeout", 0, "");
-    try fs.parse(&.{"--timeout=200ns"});
-
-    try std.std.testing.expectEqual(@as(i64, 200), d);
-}
-
-test "Invalid duration format returns error" {
-    var fs = pflag.FlagSet.init(std.std.testing.allocator, "test");
+test "DurationVar invalid format returns error" {
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
     defer fs.deinit();
     fs.error_handling = .continue_on_error;
     var timeout: i64 = 0;
     try fs.durationVar(&timeout, "timeout", 0, "");
-    const result = fs.parse(&.{"--timeout=invalid"});
-    try std.std.testing.expectError(error.InvalidCharacter, result);
+    try std.testing.expectError(error.InvalidCharacter, fs.parse(&.{"--timeout=invalid"}));
 }
-

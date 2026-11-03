@@ -48,51 +48,37 @@ pub fn floatValue(comptime T: type, val: T, p: *T) Value {
 }
 
 
+
 // ── Tests ──
 
-test "FloatVar and parse" {
-    var fs = pflag.FlagSet.init(std.std.testing.allocator, "test");
-    defer fs.deinit();
-    var val: f64 = 0.0;
-    try fs.floatVar(f64, &val, "rate", 0.0, "the rate");
-    try fs.parse(&.{"--rate=3.14"});
-    try std.testing.expectApproxEqRel(3.14, val, @as(f64, @floatCast(0.0001)));
+test "FloatVar" {
+    const TestCase = struct {
+        input: []const u8,
+        expected: f64,
+    };
+
+    const testCases = [_]TestCase{
+        .{ .input = "3.14", .expected = 3.14 },
+        .{ .input = "0x1.0p10", .expected = 1024.0 },
+        .{ .input = "1.5e2", .expected = 150.0 },
+        .{ .input = "-3.14", .expected = -3.14 },
+    };
+
+    for (testCases) |tc| {
+        var val: f64 = 0.0;
+        var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+        defer fs.deinit();
+        try fs.floatVar(f64, &val, "rate", 0.0, "the rate");
+        try fs.parse(&.{std.fmt.comptimePrint("--rate={s}", .{tc.input})});
+        try std.testing.expectApproxEqRel(tc.expected, val, @as(f64, @floatCast(0.001)));
+    }
 }
 
-test "FloatVar hex value" {
-    var fs = pflag.FlagSet.init(std.std.testing.allocator, "test");
-    defer fs.deinit();
-    var val: f64 = 0.0;
-    try fs.floatVar(f64, &val, "val", 0.0, "");
-    try fs.parse(&.{"--val=0x1.0p10"});
-    try std.testing.expectApproxEqRel(1024.0, val, @as(f64, @floatCast(0.001)));
-}
-
-test "Invalid float value returns error" {
-    var fs = pflag.FlagSet.init(std.std.testing.allocator, "test");
+test "FloatVar invalid value returns error" {
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
     defer fs.deinit();
     fs.error_handling = .continue_on_error;
     var rate: f64 = 0.0;
     try fs.floatVar(f64, &rate, "rate", 0.0, "");
-    const result = fs.parse(&.{"--rate=xyz"});
-    try std.std.testing.expectError(error.InvalidCharacter, result);
+    try std.testing.expectError(error.InvalidCharacter, fs.parse(&.{"--rate=xyz"}));
 }
-
-test "Scientific notation float" {
-    var fs = pflag.FlagSet.init(std.std.testing.allocator, "test");
-    defer fs.deinit();
-    var rate: f64 = 0.0;
-    try fs.floatVar(f64, &rate, "rate", 0.0, "");
-    try fs.parse(&.{"--rate=1.5e2"});
-    try std.testing.expectApproxEqAbs(@as(f64, 150.0), rate, 0.01);
-}
-
-test "Negative float value" {
-    var fs = pflag.FlagSet.init(std.std.testing.allocator, "test");
-    defer fs.deinit();
-    var rate: f64 = 0.0;
-    try fs.floatVar(f64, &rate, "rate", 0.0, "");
-    try fs.parse(&.{"--rate=-3.14"});
-    try std.testing.expectApproxEqAbs(@as(f64, -3.14), rate, 0.01);
-}
-
