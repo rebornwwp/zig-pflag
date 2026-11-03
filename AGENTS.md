@@ -50,6 +50,41 @@ zig test --dep pflag -Mroot=src/pflag_test.zig -Mpflag=src/pflag.zig
 3. 加 `FlagSet.xxxVar` / `xxxVarP` 两个构造方法。
 4. `typeName()` 返回值会被 `getBool`/`getInt` 等 getter 用 `std.mem.eql` 做字符串比较,必须精确。
 
+## 测试规范
+
+**位置**: 类型特定测试放在对应的 `src/*_types.zig` 文件底部，核心 FlagSet 测试放在 `src/pflag_test.zig`。
+
+**格式**: 使用 table-driven test 模式，将相似测试用例合并到一个 test 块中：
+
+```zig
+test "TypeName" {
+    const TestCase = struct {
+        input: []const []const u8,
+        expected: T,
+    };
+
+    const testCases = [_]TestCase{
+        .{ .input = &.{"--flag=value1"}, .expected = value1 },
+        .{ .input = &.{"--flag=value2"}, .expected = value2 },
+    };
+
+    for (testCases) |tc| {
+        var val: T = default;
+        var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+        defer fs.deinit();
+        try fs.typeNameVar(&val, "flag", default, "");
+        try fs.parse(tc.input);
+        try std.testing.expectEqual(tc.expected, val);
+    }
+}
+```
+
+**要求**:
+- 每个类型一个或几个 test 块，包含多个测试用例
+- 不要为每个场景创建独立的 test 块
+- 错误场景单独一个 test 块（如 `test "TypeName invalid value returns error"`）
+- 使用 `std.testing.allocator` 检测内存泄漏
+
 ## 内存管理约定
 
 这是本项目历史上出 bug 最多的地方(见 commit `2eb8740`、`f62a163` 两次泄漏修复)。
