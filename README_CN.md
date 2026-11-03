@@ -350,7 +350,7 @@ zig build build-examples
 |---------|-------------|
 | `zig build run-demo` | 完整示例（所有参数类型） |
 | `zig build run-struct-config` | 结构体字段绑定 |
-| `zig build build-examples` | 编译全部 14 个示例 |
+| `zig build build-examples` | 编译全部 15 个示例 |
 
 ## FlagSet API
 
@@ -404,9 +404,9 @@ src/
 examples/
 ├── demo.zig           # 完整示例（所有参数类型）
 ├── struct_config.zig  # 结构体字段绑定到参数
-├── int_*.zig          # int + GPA/Arena/Page/FBA
-├── string_*.zig       # string + GPA/Arena/Page/FBA
-└── float_slice_*.zig  # floatSlice + GPA/Arena/Page/FBA
+├── int_*.zig          # int + GPA/Arena/Page/FBA/c_allocator
+├── string_*.zig       # string + GPA/Arena/Page/FBA/c_allocator
+└── float_slice_*.zig  # floatSlice + GPA/Arena/Page/FBA/c_allocator
 ```
 
 ## 配合 zig-cobra 使用

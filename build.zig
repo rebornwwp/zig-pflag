@@ -77,19 +77,21 @@ pub fn build(b: *std.Build) void {
 
     // ── Allocator examples (N types × M allocators) ──
     const example_names = [_][]const u8{
-        "int_gpa",         "int_arena",         "int_page",         "int_fba",
-        "string_gpa",      "string_arena",      "string_page",      "string_fba",
-        "float_slice_gpa", "float_slice_arena", "float_slice_page", "float_slice_fba",
+        "int_gpa",         "int_arena",         "int_page",         "int_fba",         "int_c_allocator",
+        "string_gpa",      "string_arena",      "string_page",      "string_fba",      "string_c_allocator",
+        "float_slice_gpa", "float_slice_arena", "float_slice_page", "float_slice_fba", "float_slice_c_allocator",
     };
 
-    const build_examples_step = b.step("build-examples", "Build all allocator examples (3 types × 4 allocators = 12 exes)");
+    const build_examples_step = b.step("build-examples", "Build all allocator examples (15 exes)");
     const run_all_examples_step = b.step("run-examples", "Run all allocator examples");
 
     for (example_names) |name| {
+        const needs_libc = std.mem.endsWith(u8, name, "_c_allocator");
         const exe_mod = b.createModule(.{
             .root_source_file = b.path(b.fmt("examples/{s}.zig", .{name})),
             .target = target,
             .optimize = optimize,
+            .link_libc = needs_libc,
             .imports = &.{
                 .{ .name = "pflag", .module = lib_mod },
             },
