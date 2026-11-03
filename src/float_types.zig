@@ -47,8 +47,6 @@ pub fn floatValue(comptime T: type, val: T, p: *T) Value {
     return .{ .ptr = p, .vtable = vt };
 }
 
-
-
 // ── Tests ──
 
 test "FloatVar" {

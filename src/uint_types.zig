@@ -63,8 +63,6 @@ pub fn uintValue(comptime T: type, val: T, p: *T) Value {
     return .{ .ptr = p, .vtable = vt };
 }
 
-
-
 // ── Tests ──
 
 test "UintVar" {

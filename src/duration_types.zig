@@ -76,8 +76,6 @@ pub fn durationValue(val: i64, p: *i64) Value {
     return .{ .ptr = p, .vtable = &durationVtable };
 }
 
-
-
 // ── Tests ──
 
 test "DurationVar" {

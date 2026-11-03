@@ -86,8 +86,6 @@ fn stringStrFnLegacy(ptr: *anyopaque, gpa: std.mem.Allocator) anyerror![]const u
     return gpa.dupe(u8, (@as(*[]const u8, @ptrCast(@alignCast(ptr)))).*);
 }
 
-
-
 // ── Tests ──
 
 test "StringVar" {

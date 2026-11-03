@@ -336,8 +336,6 @@ pub fn floatSliceValue(comptime T: type, state: *SliceState(T)) Value {
     return .{ .ptr = @ptrCast(@alignCast(state)), .vtable = vt };
 }
 
-
-
 // ── Tests ──
 
 test "StringSlice" {

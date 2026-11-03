@@ -205,8 +205,6 @@ pub fn stringToStringValue(state: *StringToStringState) Value {
     return .{ .ptr = @ptrCast(@alignCast(state)), .vtable = &strToStrVtable };
 }
 
-
-
 // ── Tests ──
 
 test "StringToInt" {

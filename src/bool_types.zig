@@ -52,8 +52,6 @@ pub fn boolValue(val: bool, p: *bool) Value {
     return .{ .ptr = p, .vtable = &boolVtable };
 }
 
-
-
 // ── Tests ──
 
 test "BoolVar" {
