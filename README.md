@@ -409,25 +409,6 @@ examples/
 └── float_slice_*.zig  # floatSlice + GPA/Arena/Page/FBA/c_allocator
 ```
 
-## Usage with zig-cobra
-
-```zig
-const cobra = @import("cobra");
-const pflag = cobra.command_mod.pflag;
-
-var flags = pflag.FlagSet.init(allocator, "mycmd");
-defer flags.deinit();
-var name: []const u8 = "world";
-flags.stringVarP(&name, "name", "n", "world", "your name") catch {};
-
-var cmd = cobra.Command{
-    .use   = "mycmd",
-    .short = "A CLI app",
-    .flags = &flags,
-    .run   = myRunFn,
-};
-```
-
 ## License
 
 BSD 3-Clause
