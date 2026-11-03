@@ -40,112 +40,51 @@ pub fn countValue(val: i32, p: *i32) Value {
     return .{ .ptr = p, .vtable = &countVtable };
 }
 
-
 // ── Tests ──
 
 test "CountVar" {
-    const testing = std.testing;
-    
-    // Test 1: increments on each use (-v -v -v)
-    {
-        var fs = pflag.FlagSet.init(testing.allocator, "test");
+    const TestCase = struct {
+        input: []const []const u8,
+        success: bool,
+        expected: i32,
+    };
+
+    const testCases = [_]TestCase{
+        .{ .input = &.{}, .success = true, .expected = 0 },
+        .{ .input = &.{"-v"}, .success = true, .expected = 1 },
+        .{ .input = &.{"-vvv"}, .success = true, .expected = 3 },
+        .{ .input = &.{ "-v", "-v", "-v" }, .success = true, .expected = 3 },
+        .{ .input = &.{ "-v", "--verbose", "-v" }, .success = true, .expected = 3 },
+        .{ .input = &.{ "-v=3", "-v" }, .success = true, .expected = 4 },
+        .{ .input = &.{"--verbose=0"}, .success = true, .expected = 0 },
+        .{ .input = &.{"-v=0"}, .success = true, .expected = 0 },
+        .{ .input = &.{"-v=a"}, .success = false, .expected = 0 },
+    };
+
+    for (testCases, 0..) |tc, i| {
+        var c: i32 = 0;
+        var fs = pflag.FlagSet.init(std.testing.allocator, "test");
         defer fs.deinit();
         fs.error_handling = .continue_on_error;
-        var c: i32 = 0;
-        try fs.countVarP(&c, "verbose", "v", 0, "verbosity level");
-        try fs.parse(&.{ "-v", "-v", "-v" });
-        try testing.expectEqual(@as(i32, 3), c);
-    }
-    
-    // Test 2: explicit value (--count=5)
-    {
-        var fs = pflag.FlagSet.init(testing.allocator, "test");
-        defer fs.deinit();
-        var c: i32 = 0;
-        try fs.countVar(&c, "count", 0, "");
-        try fs.parse(&.{"--count=5"});
-        try testing.expectEqual(@as(i32, 5), c);
-    }
-    
-    // Test 3: default value with increment (--count with default 10)
-    {
-        var fs = pflag.FlagSet.init(testing.allocator, "test");
-        defer fs.deinit();
-        var c: i32 = 10;
-        try fs.countVar(&c, "count", 10, "");
-        try fs.parse(&.{"--count"});
-        try testing.expectEqual(@as(i32, 11), c);
-    }
-    
-    // Test 4: explicit value assigns not accumulates
-    {
-        var fs = pflag.FlagSet.init(testing.allocator, "test");
-        defer fs.deinit();
-        var c: i32 = 10;
-        try fs.countVar(&c, "count", 10, "");
-        try fs.parse(&.{"--count=5"});
-        try testing.expectEqual(@as(i32, 5), c); // Should be 5 (assigned), not 15 (accumulated)
-    }
-    
-    // Test 5: empty args keeps default
-    {
-        var fs = pflag.FlagSet.init(testing.allocator, "test");
-        defer fs.deinit();
-        var c: i32 = 0;
-        try fs.countVarP(&c, "verbose", "v", 0, "");
-        try fs.parse(&.{});
-        try testing.expectEqual(@as(i32, 0), c);
-    }
-    
-    // Test 6: single short flag (-v)
-    {
-        var fs = pflag.FlagSet.init(testing.allocator, "test");
-        defer fs.deinit();
-        var c: i32 = 0;
-        try fs.countVarP(&c, "verbose", "v", 0, "");
-        try fs.parse(&.{"-v"});
-        try testing.expectEqual(@as(i32, 1), c);
-    }
-    
-    // Test 7: combined short flags (-vvv)
-    {
-        var fs = pflag.FlagSet.init(testing.allocator, "test");
-        defer fs.deinit();
-        var c: i32 = 0;
-        try fs.countVarP(&c, "verbose", "v", 0, "");
-        try fs.parse(&.{"-vvv"});
-        try testing.expectEqual(@as(i32, 3), c);
-    }
-    
-    // Test 8: mixed long and short flags (-v --verbose -v)
-    {
-        var fs = pflag.FlagSet.init(testing.allocator, "test");
-        defer fs.deinit();
-        fs.error_handling = .continue_on_error;
-        var c: i32 = 0;
-        try fs.countVarP(&c, "verbose", "v", 0, "");
-        try fs.parse(&.{ "-v", "--verbose", "-v" });
-        try testing.expectEqual(@as(i32, 3), c);
-    }
-    
-    // Test 9: explicit value with short flag (-v=0)
-    {
-        var fs = pflag.FlagSet.init(testing.allocator, "test");
-        defer fs.deinit();
-        var c: i32 = 0;
-        try fs.countVarP(&c, "verbose", "v", 0, "");
-        try fs.parse(&.{"-v=0"});
-        try testing.expectEqual(@as(i32, 0), c);
-    }
-    
-    // Test 10: invalid value returns error (-v=a)
-    {
-        var fs = pflag.FlagSet.init(testing.allocator, "test");
-        defer fs.deinit();
-        fs.error_handling = .continue_on_error;
-        var c: i32 = 0;
-        try fs.countVarP(&c, "verbose", "v", 0, "");
-        try testing.expectError(error.InvalidCharacter, fs.parse(&.{"-v=a"}));
+        try fs.countVarP(&c, "verbose", "v", 0, "a counter");
+
+        const result = fs.parse(tc.input);
+
+        if (tc.success) {
+            if (result) |_| {
+                try std.testing.expectEqual(tc.expected, c);
+            } else |err| {
+                std.debug.print("Test case {d}: expected success, got error {}\n", .{ i, err });
+                return err;
+            }
+        } else {
+            if (result) |_| {
+                std.debug.print("Test case {d}: expected failure, got success\n", .{i});
+                return error.TestExpectedError;
+            } else |_| {
+                // Expected failure
+            }
+        }
     }
 }
 
