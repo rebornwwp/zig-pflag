@@ -1160,145 +1160,104 @@ test "PrintUsage output" {
     try testing.expect(std.mem.containsAtLeast(u8, usage, 1, "the count"));
 }
 
-// ── Int sub-type parsing (from Go testParse) ──
+// ── Comprehensive type parsing (from Go testParse) ──
 
-test "Int16Var parse" {
+test "Comprehensive type parsing" {
     var fs = newTestFlagSet();
     defer fs.deinit();
-    var val: i16 = 0;
-    try fs.intVar(i16, &val, "int16", 0, "int16 value");
-    try fs.parse(&.{"--int16=-16"});
-    try testing.expectEqual(@as(i16, -16), val);
-}
 
-test "Int32Var parse" {
-    var fs = newTestFlagSet();
-    defer fs.deinit();
-    var val: i32 = 0;
-    try fs.intVar(i32, &val, "int32", 0, "int32 value");
-    try fs.parse(&.{"--int32=-32"});
-    try testing.expectEqual(@as(i32, -32), val);
-}
+    // Define all flag types
+    var bool_flag: bool = false;
+    var bool2_flag: bool = false;
+    var bool3_flag: bool = false;
+    var int_flag: i32 = 0;
+    var int8_flag: i8 = 0;
+    var int16_flag: i16 = 0;
+    var int32_flag: i32 = 0;
+    var int64_flag: i64 = 0;
+    var uint_flag: u32 = 0;
+    var uint8_flag: u8 = 0;
+    var uint16_flag: u16 = 0;
+    var uint32_flag: u32 = 0;
+    var uint64_flag: u64 = 0;
+    var string_flag: []const u8 = "0";
+    var float32_flag: f32 = 0;
+    var float64_flag: f64 = 0;
+    var duration_flag: i64 = 0;
 
-// ── Uint sub-type parsing (from Go testParse) ──
+    try fs.boolVar(&bool_flag, "bool", false, "bool value");
+    try fs.boolVar(&bool2_flag, "bool2", false, "bool2 value");
+    try fs.boolVar(&bool3_flag, "bool3", false, "bool3 value");
+    try fs.intVar(i32, &int_flag, "int", 0, "int value");
+    try fs.intVar(i8, &int8_flag, "int8", 0, "int8 value");
+    try fs.intVar(i16, &int16_flag, "int16", 0, "int16 value");
+    try fs.intVar(i32, &int32_flag, "int32", 0, "int32 value");
+    try fs.intVar(i64, &int64_flag, "int64", 0, "int64 value");
+    try fs.uintVar(u32, &uint_flag, "uint", 0, "uint value");
+    try fs.uintVar(u8, &uint8_flag, "uint8", 0, "uint8 value");
+    try fs.uintVar(u16, &uint16_flag, "uint16", 0, "uint16 value");
+    try fs.uintVar(u32, &uint32_flag, "uint32", 0, "uint32 value");
+    try fs.uintVar(u64, &uint64_flag, "uint64", 0, "uint64 value");
+    try fs.stringVar(&string_flag, "string", "0", "string value");
+    try fs.floatVar(f32, &float32_flag, "float32", 0, "float32 value");
+    try fs.floatVar(f64, &float64_flag, "float64", 0, "float64 value");
+    try fs.durationVar(&duration_flag, "duration", 0, "duration value");
 
-test "Uint16Var parse" {
-    var fs = newTestFlagSet();
-    defer fs.deinit();
-    var val: u16 = 0;
-    try fs.uintVar(u16, &val, "uint16", 0, "uint16 value");
-    try fs.parse(&.{"--uint16=16"});
-    try testing.expectEqual(@as(u16, 16), val);
-}
+    // Parse all flags at once (matches Go testParse)
+    try fs.parse(&.{
+        "--bool",
+        "--bool2=true",
+        "--bool3=false",
+        "--int=22",
+        "--int8=-8",
+        "--int16=-16",
+        "--int32=-32",
+        "--int64=0x23",
+        "--uint=24",
+        "--uint8=8",
+        "--uint16=16",
+        "--uint32=32",
+        "--uint64=25",
+        "--string=hello",
+        "--float32=-172e12",
+        "--float64=2718e28",
+        "--duration=2m",
+    });
 
-test "Uint32Var parse" {
-    var fs = newTestFlagSet();
-    defer fs.deinit();
-    var val: u32 = 0;
-    try fs.uintVar(u32, &val, "uint32", 0, "uint32 value");
-    try fs.parse(&.{"--uint32=32"});
-    try testing.expectEqual(@as(u32, 32), val);
-}
+    // Verify all parsed values
+    try testing.expectEqual(true, bool_flag);
+    try testing.expectEqual(true, bool2_flag);
+    try testing.expectEqual(false, bool3_flag);
+    try testing.expectEqual(@as(i32, 22), int_flag);
+    try testing.expectEqual(@as(i8, -8), int8_flag);
+    try testing.expectEqual(@as(i16, -16), int16_flag);
+    try testing.expectEqual(@as(i32, -32), int32_flag);
+    try testing.expectEqual(@as(i64, 0x23), int64_flag);
+    try testing.expectEqual(@as(u32, 24), uint_flag);
+    try testing.expectEqual(@as(u8, 8), uint8_flag);
+    try testing.expectEqual(@as(u16, 16), uint16_flag);
+    try testing.expectEqual(@as(u32, 32), uint32_flag);
+    try testing.expectEqual(@as(u64, 25), uint64_flag);
+    try testing.expectEqualStrings("hello", string_flag);
+    try testing.expectApproxEqRel(@as(f32, -172e12), float32_flag, @as(f32, 0.001));
+    try testing.expectApproxEqRel(@as(f64, 2718e28), float64_flag, @as(f64, 0.001));
+    try testing.expectEqual(@as(i64, 2 * std.time.ns_per_min), duration_flag);
 
-// ── Float sub-type parsing (from Go testParse) ──
-
-test "Float32Var parse" {
-    var fs = newTestFlagSet();
-    defer fs.deinit();
-    var val: f32 = 0;
-    try fs.floatVar(f32, &val, "float32", 0, "float32 value");
-    try fs.parse(&.{"--float32=-172e12"});
-    try testing.expectApproxEqRel(@as(f32, -172e12), val, @as(f32, 0.001));
-}
-
-// ── Getter methods (from Go testParse) ──
-
-test "getInt with i8" {
-    var fs = newTestFlagSet();
-    defer fs.deinit();
-    var val: i8 = 0;
-    try fs.intVar(i8, &val, "int8", 0, "int8 value");
-    try fs.parse(&.{"--int8=-8"});
+    // Verify getter methods
+    try testing.expectEqual(true, try fs.getBool("bool"));
+    try testing.expectEqual(@as(i32, 22), try fs.getInt(i32, "int"));
     try testing.expectEqual(@as(i8, -8), try fs.getInt(i8, "int8"));
-}
-
-test "getInt with i16" {
-    var fs = newTestFlagSet();
-    defer fs.deinit();
-    var val: i16 = 0;
-    try fs.intVar(i16, &val, "int16", 0, "int16 value");
-    try fs.parse(&.{"--int16=-16"});
     try testing.expectEqual(@as(i16, -16), try fs.getInt(i16, "int16"));
-}
-
-test "getInt with i32" {
-    var fs = newTestFlagSet();
-    defer fs.deinit();
-    var val: i32 = 0;
-    try fs.intVar(i32, &val, "int32", 0, "int32 value");
-    try fs.parse(&.{"--int32=-32"});
     try testing.expectEqual(@as(i32, -32), try fs.getInt(i32, "int32"));
-}
-
-test "getInt with i64" {
-    var fs = newTestFlagSet();
-    defer fs.deinit();
-    var val: i64 = 0;
-    try fs.intVar(i64, &val, "int64", 0, "int64 value");
-    try fs.parse(&.{"--int64=0x23"});
     try testing.expectEqual(@as(i64, 0x23), try fs.getInt(i64, "int64"));
-}
-
-test "getInt with u8" {
-    var fs = newTestFlagSet();
-    defer fs.deinit();
-    var val: u8 = 0;
-    try fs.uintVar(u8, &val, "uint8", 0, "uint8 value");
-    try fs.parse(&.{"--uint8=8"});
+    try testing.expectEqual(@as(u32, 24), try fs.getInt(u32, "uint"));
     try testing.expectEqual(@as(u8, 8), try fs.getInt(u8, "uint8"));
-}
-
-test "getInt with u16" {
-    var fs = newTestFlagSet();
-    defer fs.deinit();
-    var val: u16 = 0;
-    try fs.uintVar(u16, &val, "uint16", 0, "uint16 value");
-    try fs.parse(&.{"--uint16=16"});
     try testing.expectEqual(@as(u16, 16), try fs.getInt(u16, "uint16"));
-}
-
-test "getInt with u32" {
-    var fs = newTestFlagSet();
-    defer fs.deinit();
-    var val: u32 = 0;
-    try fs.uintVar(u32, &val, "uint32", 0, "uint32 value");
-    try fs.parse(&.{"--uint32=32"});
     try testing.expectEqual(@as(u32, 32), try fs.getInt(u32, "uint32"));
-}
-
-test "getInt with u64" {
-    var fs = newTestFlagSet();
-    defer fs.deinit();
-    var val: u64 = 0;
-    try fs.uintVar(u64, &val, "uint64", 0, "uint64 value");
-    try fs.parse(&.{"--uint64=25"});
     try testing.expectEqual(@as(u64, 25), try fs.getInt(u64, "uint64"));
-}
-
-test "getFloat with f32" {
-    var fs = newTestFlagSet();
-    defer fs.deinit();
-    var val: f32 = 0;
-    try fs.floatVar(f32, &val, "float32", 0, "float32 value");
-    try fs.parse(&.{"--float32=-172e12"});
+    const str = try fs.getString("string");
+    defer testing.allocator.free(str);
+    try testing.expectEqualStrings("hello", str);
     try testing.expectApproxEqRel(@as(f32, -172e12), try fs.getFloat(f32, "float32"), @as(f32, 0.001));
-}
-
-test "getFloat with f64" {
-    var fs = newTestFlagSet();
-    defer fs.deinit();
-    var val: f64 = 0;
-    try fs.floatVar(f64, &val, "float64", 0, "float64 value");
-    try fs.parse(&.{"--float64=2718e28"});
     try testing.expectApproxEqRel(@as(f64, 2718e28), try fs.getFloat(f64, "float64"), @as(f64, 0.001));
 }
