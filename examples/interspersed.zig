@@ -3,7 +3,10 @@ const pflag = @import("pflag");
 
 pub fn main() !void {
     var gpa_state: std.heap.SafeAllocator = .init(std.heap.page_allocator, .{});
-    defer _ = gpa_state.deinit();
+    defer {
+        const leaks = gpa_state.deinit();
+        if (leaks != 0) @panic("Memory leak detected!");
+    }
     const gpa = gpa_state.allocator();
 
     var fs = pflag.FlagSet.init(gpa, "example");
