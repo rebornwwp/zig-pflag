@@ -53,27 +53,36 @@ pub fn build(b: *std.Build) void {
     const run_demo_step = b.step("run-demo", "Run the zig-pflag demo");
     run_demo_step.dependOn(&run_demo.step);
 
-    // ── Struct config example ──
-    const struct_mod = b.createModule(.{
-        .root_source_file = b.path("examples/struct_config.zig"),
-        .target = target,
-        .optimize = optimize,
-        .imports = &.{
-            .{ .name = "pflag", .module = lib_mod },
-        },
-    });
-    const struct_exe = b.addExecutable(.{
-        .name = "example-struct_config",
-        .root_module = struct_mod,
-    });
-    const install_struct = b.addInstallArtifact(struct_exe, .{});
-    b.getInstallStep().dependOn(&install_struct.step);
+    // ── Standalone examples ──
+    const standalone_examples = [_][]const u8{
+        "struct_config",
+        "shorthand_lookup",
+        "string_to_string",
+        "interspersed",
+    };
 
-    const run_struct = b.addRunArtifact(struct_exe);
-    run_struct.step.dependOn(&install_struct.step);
-    run_struct.addPassthruArgs();
-    const run_struct_step = b.step("run-struct-config", "Run the struct config example");
-    run_struct_step.dependOn(&run_struct.step);
+    for (standalone_examples) |name| {
+        const exe_mod = b.createModule(.{
+            .root_source_file = b.path(b.fmt("examples/{s}.zig", .{name})),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "pflag", .module = lib_mod },
+            },
+        });
+        const exe = b.addExecutable(.{
+            .name = b.fmt("example-{s}", .{name}),
+            .root_module = exe_mod,
+        });
+        const install_exe = b.addInstallArtifact(exe, .{});
+        b.getInstallStep().dependOn(&install_exe.step);
+
+        const run_exe = b.addRunArtifact(exe);
+        run_exe.step.dependOn(&install_exe.step);
+        run_exe.addPassthruArgs();
+        const run_step = b.step(b.fmt("run-{s}", .{name}), b.fmt("Run the {s} example", .{name}));
+        run_step.dependOn(&run_exe.step);
+    }
 
     // ── Allocator examples (N types × M allocators) ──
     const example_names = [_][]const u8{
