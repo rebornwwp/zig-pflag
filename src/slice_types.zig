@@ -378,6 +378,33 @@ test "StringSlice first Set replaces defaults" {
     try std.testing.expectEqualStrings("gamma", slice.items[0]);
 }
 
+test "StringSlice CalledTwice - multiple Set calls append" {
+    var slice: std.ArrayListUnmanaged([]const u8) = .empty;
+    var state = pflag.StringSliceState{ .value = &slice, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.stringSliceVar(&state, "tag", &.{}, "");
+    // First call replaces defaults (empty), second call appends
+    try fs.parse(&.{ "--tag=a,b", "--tag=c,d" });
+    try std.testing.expectEqual(@as(usize, 4), slice.items.len);
+    try std.testing.expectEqualStrings("a", slice.items[0]);
+    try std.testing.expectEqualStrings("b", slice.items[1]);
+    try std.testing.expectEqualStrings("c", slice.items[2]);
+    try std.testing.expectEqualStrings("d", slice.items[3]);
+}
+
+test "StringSlice WithDefault - preserves defaults when not set" {
+    var slice: std.ArrayListUnmanaged([]const u8) = .empty;
+    var state = pflag.StringSliceState{ .value = &slice, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.stringSliceVar(&state, "tag", &.{ "default1", "default2" }, "");
+    try fs.parse(&.{});
+    try std.testing.expectEqual(@as(usize, 2), slice.items.len);
+    try std.testing.expectEqualStrings("default1", slice.items[0]);
+    try std.testing.expectEqualStrings("default2", slice.items[1]);
+}
+
 test "IntSlice" {
     const TestCase = struct {
         input: []const []const u8,
@@ -404,6 +431,32 @@ test "IntSlice" {
     }
 }
 
+test "IntSlice CalledTwice - multiple Set calls append" {
+    var slice: std.ArrayListUnmanaged(i32) = .empty;
+    var state = pflag.SliceState(i32){ .value = &slice, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.intSliceVar(i32, &state, "num", &.{}, "");
+    try fs.parse(&.{ "--num=1,2", "--num=3,4" });
+    try std.testing.expectEqual(@as(usize, 4), slice.items.len);
+    try std.testing.expectEqual(@as(i32, 1), slice.items[0]);
+    try std.testing.expectEqual(@as(i32, 2), slice.items[1]);
+    try std.testing.expectEqual(@as(i32, 3), slice.items[2]);
+    try std.testing.expectEqual(@as(i32, 4), slice.items[3]);
+}
+
+test "IntSlice WithDefault - preserves defaults when not set" {
+    var slice: std.ArrayListUnmanaged(i32) = .empty;
+    var state = pflag.SliceState(i32){ .value = &slice, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.intSliceVar(i32, &state, "num", &.{ 0, 1 }, "");
+    try fs.parse(&.{});
+    try std.testing.expectEqual(@as(usize, 2), slice.items.len);
+    try std.testing.expectEqual(@as(i32, 0), slice.items[0]);
+    try std.testing.expectEqual(@as(i32, 1), slice.items[1]);
+}
+
 test "BoolSlice" {
     var slice: std.ArrayListUnmanaged(bool) = .empty;
     var state = pflag.SliceState(bool){ .value = &slice, .gpa = std.testing.allocator };
@@ -415,6 +468,32 @@ test "BoolSlice" {
     try std.testing.expect(slice.items[0]);
     try std.testing.expect(!slice.items[1]);
     try std.testing.expect(slice.items[2]);
+}
+
+test "BoolSlice CalledTwice - multiple Set calls append" {
+    var slice: std.ArrayListUnmanaged(bool) = .empty;
+    var state = pflag.SliceState(bool){ .value = &slice, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.boolSliceVar(bool, &state, "flags", &.{}, "");
+    try fs.parse(&.{ "--flags=true,false", "--flags=1,0" });
+    try std.testing.expectEqual(@as(usize, 4), slice.items.len);
+    try std.testing.expect(slice.items[0]);
+    try std.testing.expect(!slice.items[1]);
+    try std.testing.expect(slice.items[2]);
+    try std.testing.expect(!slice.items[3]);
+}
+
+test "BoolSlice WithDefault - preserves defaults when not set" {
+    var slice: std.ArrayListUnmanaged(bool) = .empty;
+    var state = pflag.SliceState(bool){ .value = &slice, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.boolSliceVar(bool, &state, "flags", &.{ false, true }, "");
+    try fs.parse(&.{});
+    try std.testing.expectEqual(@as(usize, 2), slice.items.len);
+    try std.testing.expect(!slice.items[0]);
+    try std.testing.expect(slice.items[1]);
 }
 
 test "FloatSlice" {
@@ -430,6 +509,32 @@ test "FloatSlice" {
     try std.testing.expectApproxEqRel(@as(f64, 3.14), slice.items[2], 0.001);
 }
 
+test "FloatSlice CalledTwice - multiple Set calls append" {
+    var slice: std.ArrayListUnmanaged(f64) = .empty;
+    var state = pflag.SliceState(f64){ .value = &slice, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.floatSliceVar(f64, &state, "vals", &.{}, "");
+    try fs.parse(&.{ "--vals=1.5,2.7", "--vals=3.14,4.0" });
+    try std.testing.expectEqual(@as(usize, 4), slice.items.len);
+    try std.testing.expectApproxEqRel(@as(f64, 1.5), slice.items[0], 0.001);
+    try std.testing.expectApproxEqRel(@as(f64, 2.7), slice.items[1], 0.001);
+    try std.testing.expectApproxEqRel(@as(f64, 3.14), slice.items[2], 0.001);
+    try std.testing.expectApproxEqRel(@as(f64, 4.0), slice.items[3], 0.001);
+}
+
+test "FloatSlice WithDefault - preserves defaults when not set" {
+    var slice: std.ArrayListUnmanaged(f64) = .empty;
+    var state = pflag.SliceState(f64){ .value = &slice, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.floatSliceVar(f64, &state, "vals", &.{ 1.0, 2.0 }, "");
+    try fs.parse(&.{});
+    try std.testing.expectEqual(@as(usize, 2), slice.items.len);
+    try std.testing.expectApproxEqRel(@as(f64, 1.0), slice.items[0], 0.001);
+    try std.testing.expectApproxEqRel(@as(f64, 2.0), slice.items[1], 0.001);
+}
+
 test "UintSlice" {
     var slice: std.ArrayListUnmanaged(u32) = .empty;
     var state = pflag.SliceState(u32){ .value = &slice, .gpa = std.testing.allocator };
@@ -441,6 +546,32 @@ test "UintSlice" {
     try std.testing.expectEqual(@as(u32, 10), slice.items[0]);
     try std.testing.expectEqual(@as(u32, 20), slice.items[1]);
     try std.testing.expectEqual(@as(u32, 30), slice.items[2]);
+}
+
+test "UintSlice CalledTwice - multiple Set calls append" {
+    var slice: std.ArrayListUnmanaged(u32) = .empty;
+    var state = pflag.SliceState(u32){ .value = &slice, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.uintSliceVar(u32, &state, "nums", &.{}, "");
+    try fs.parse(&.{ "--nums=1,2", "--nums=3,4" });
+    try std.testing.expectEqual(@as(usize, 4), slice.items.len);
+    try std.testing.expectEqual(@as(u32, 1), slice.items[0]);
+    try std.testing.expectEqual(@as(u32, 2), slice.items[1]);
+    try std.testing.expectEqual(@as(u32, 3), slice.items[2]);
+    try std.testing.expectEqual(@as(u32, 4), slice.items[3]);
+}
+
+test "UintSlice WithDefault - preserves defaults when not set" {
+    var slice: std.ArrayListUnmanaged(u32) = .empty;
+    var state = pflag.SliceState(u32){ .value = &slice, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.uintSliceVar(u32, &state, "nums", &.{ 0, 1 }, "");
+    try fs.parse(&.{});
+    try std.testing.expectEqual(@as(usize, 2), slice.items.len);
+    try std.testing.expectEqual(@as(u32, 0), slice.items[0]);
+    try std.testing.expectEqual(@as(u32, 1), slice.items[1]);
 }
 
 test "StringArray" {
@@ -467,4 +598,29 @@ test "StringArray" {
             try std.testing.expectEqualStrings(first, slice.items[0]);
         }
     }
+}
+
+test "StringArray CalledTwice - multiple Set calls append" {
+    var slice: std.ArrayListUnmanaged([]const u8) = .empty;
+    var state = pflag.StringArrayState{ .value = &slice, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.stringArrayVar(&state, "arr", &.{}, "");
+    try fs.parse(&.{ "--arr=a,b", "--arr=c" });
+    // StringArray: first Set replaces defaults, subsequent Set appends
+    try std.testing.expectEqual(@as(usize, 2), slice.items.len);
+    try std.testing.expectEqualStrings("a,b", slice.items[0]);
+    try std.testing.expectEqualStrings("c", slice.items[1]);
+}
+
+test "StringArray WithDefault - preserves defaults when not set" {
+    var slice: std.ArrayListUnmanaged([]const u8) = .empty;
+    var state = pflag.StringArrayState{ .value = &slice, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.stringArrayVar(&state, "arr", &.{ "default1", "default2" }, "");
+    try fs.parse(&.{});
+    try std.testing.expectEqual(@as(usize, 2), slice.items.len);
+    try std.testing.expectEqualStrings("default1", slice.items[0]);
+    try std.testing.expectEqualStrings("default2", slice.items[1]);
 }

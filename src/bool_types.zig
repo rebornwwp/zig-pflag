@@ -93,3 +93,15 @@ test "BoolVar invalid value returns error" {
     try fs.boolVar(&flag_val, "verbose", false, "");
     try std.testing.expectError(error.InvalidBoolValue, fs.parse(&.{"--verbose=invalid"}));
 }
+
+test "BoolP - short flag with extra argument" {
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    var flag_val: bool = false;
+    try fs.boolVarP(&flag_val, "verbose", "v", false, "enable verbose");
+    // Short bool flag with extra argument - the "maybe" becomes a positional arg
+    try fs.parse(&.{ "-v", "maybe" });
+    try std.testing.expect(flag_val);
+    try std.testing.expectEqual(@as(usize, 1), fs.nArg());
+    try std.testing.expectEqualStrings("maybe", fs.arg(0));
+}

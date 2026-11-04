@@ -230,6 +230,34 @@ test "StringToInt" {
     }
 }
 
+test "StringToInt CalledTwice - multiple Set calls merge" {
+    var map: std.StringHashMapUnmanaged(i32) = .empty;
+    var state = pflag.StringToIntState(i32){ .value = &map, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.stringToIntVar(i32, &state, "headers", 0, "");
+    try fs.parse(&.{ "--headers=a=1,b=2", "--headers=c=3" });
+    try std.testing.expectEqual(@as(u32, 3), map.count());
+    try std.testing.expectEqual(@as(i32, 1), map.get("a").?);
+    try std.testing.expectEqual(@as(i32, 2), map.get("b").?);
+    try std.testing.expectEqual(@as(i32, 3), map.get("c").?);
+}
+
+test "StringToInt WithDefault - preserves defaults when not set" {
+    var map: std.StringHashMapUnmanaged(i32) = .empty;
+    var state = pflag.StringToIntState(i32){ .value = &map, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.stringToIntVar(i32, &state, "headers", 0, "");
+    // Pre-populate defaults
+    try map.put(std.testing.allocator, "a", 1);
+    try map.put(std.testing.allocator, "b", 2);
+    try fs.parse(&.{});
+    try std.testing.expectEqual(@as(u32, 2), map.count());
+    try std.testing.expectEqual(@as(i32, 1), map.get("a").?);
+    try std.testing.expectEqual(@as(i32, 2), map.get("b").?);
+}
+
 test "StringToInt rejects non-key=value" {
     var map: std.StringHashMapUnmanaged(i32) = .empty;
     var state = pflag.StringToIntState(i32){ .value = &map, .gpa = std.testing.allocator };
@@ -261,4 +289,32 @@ test "StringToString" {
         try fs.parse(tc.input);
         try std.testing.expectEqual(tc.expected_count, map.count());
     }
+}
+
+test "StringToString CalledTwice - multiple Set calls merge" {
+    var map: std.StringHashMapUnmanaged([]const u8) = .empty;
+    var state = pflag.StringToStringState{ .value = &map, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.stringToStringVar(&state, "labels", "", "");
+    try fs.parse(&.{ "--labels=a=1,b=2", "--labels=c=3" });
+    try std.testing.expectEqual(@as(u32, 3), map.count());
+    try std.testing.expectEqualStrings("1", map.get("a").?);
+    try std.testing.expectEqualStrings("2", map.get("b").?);
+    try std.testing.expectEqualStrings("3", map.get("c").?);
+}
+
+test "StringToString WithDefault - preserves defaults when not set" {
+    var map: std.StringHashMapUnmanaged([]const u8) = .empty;
+    var state = pflag.StringToStringState{ .value = &map, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.stringToStringVar(&state, "labels", "", "");
+    // Pre-populate defaults
+    try map.put(std.testing.allocator, "a", "1");
+    try map.put(std.testing.allocator, "b", "2");
+    try fs.parse(&.{});
+    try std.testing.expectEqual(@as(u32, 2), map.count());
+    try std.testing.expectEqualStrings("1", map.get("a").?);
+    try std.testing.expectEqualStrings("2", map.get("b").?);
 }

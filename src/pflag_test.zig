@@ -1548,3 +1548,47 @@ test "Output writes to out_writer" {
     const output = std.Io.Writer.buffered(&writer);
     try testing.expect(std.mem.containsAtLeast(u8, output, 1, "Usage of test"));
 }
+
+test "PrintUsage format - long and short flags" {
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    var b1: bool = false;
+    var b2: bool = false;
+    var b3: bool = false;
+    var b4: bool = false;
+    try fs.boolVar(&b1, "long-form", false, "Some description");
+    try fs.boolVar(&b2, "long-form2", false, "Some description");
+    try fs.boolVarP(&b3, "long-name", "s", false, "Some description");
+    try fs.boolVarP(&b4, "long-name2", "t", false, "Some description");
+
+    var buf: [1024]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
+    fs.out_writer = &writer;
+    fs.printDefaults();
+    const output = std.Io.Writer.buffered(&writer);
+
+    // Verify all flags appear in output
+    try testing.expect(std.mem.containsAtLeast(u8, output, 1, "--long-form"));
+    try testing.expect(std.mem.containsAtLeast(u8, output, 1, "--long-form2"));
+    try testing.expect(std.mem.containsAtLeast(u8, output, 1, "-s, --long-name"));
+    try testing.expect(std.mem.containsAtLeast(u8, output, 1, "-t, --long-name2"));
+    try testing.expect(std.mem.containsAtLeast(u8, output, 4, "Some description"));
+}
+
+test "PrintUsage format - with string defaults" {
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    var s: []const u8 = "test";
+    try fs.stringVarP(&s, "some-arg", "l", "test", "Some description");
+
+    var buf: [512]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
+    fs.out_writer = &writer;
+    fs.printDefaults();
+    const output = std.Io.Writer.buffered(&writer);
+
+    // Verify flag name, shorthand, and default value appear
+    try testing.expect(std.mem.containsAtLeast(u8, output, 1, "-l, --some-arg"));
+    try testing.expect(std.mem.containsAtLeast(u8, output, 1, "test"));
+    try testing.expect(std.mem.containsAtLeast(u8, output, 1, "Some description"));
+}
