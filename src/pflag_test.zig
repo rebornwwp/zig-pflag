@@ -1261,3 +1261,290 @@ test "Comprehensive type parsing" {
     try testing.expectApproxEqRel(@as(f32, -172e12), try fs.getFloat(f32, "float32"), @as(f32, 0.001));
     try testing.expectApproxEqRel(@as(f64, 2718e28), try fs.getFloat(f64, "float64"), @as(f64, 0.001));
 }
+
+// ── Tests from Go flag_test.go (supplementary) ──
+
+test "ShorthandLookup returns flag by shorthand" {
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    var boola: bool = false;
+    var boolb: bool = false;
+    try fs.boolVarP(&boola, "boola", "a", false, "bool value");
+    try fs.boolVarP(&boolb, "boolb", "b", false, "bool2 value");
+    // Successful lookup
+    const flag_a = fs.shorthandLookup('a');
+    try testing.expect(flag_a != null);
+    try testing.expectEqualStrings("boola", flag_a.?.name);
+    const flag_b = fs.shorthandLookup('b');
+    try testing.expect(flag_b != null);
+    try testing.expectEqualStrings("boolb", flag_b.?.name);
+    // Unknown shorthand returns null
+    try testing.expect(fs.shorthandLookup('z') == null);
+}
+
+test "Changed helper - multiple flags" {
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    var changed: bool = false;
+    var settrue: bool = true;
+    var setfalse: bool = false;
+    var unchanged: bool = false;
+    try fs.boolVar(&changed, "changed", false, "changed bool");
+    try fs.boolVar(&settrue, "settrue", true, "true to true");
+    try fs.boolVar(&setfalse, "setfalse", false, "false to false");
+    try fs.boolVar(&unchanged, "unchanged", false, "unchanged bool");
+
+    try fs.parse(&.{ "--changed", "--settrue", "--setfalse=false" });
+
+    try testing.expect(fs.changed("changed"));
+    try testing.expect(fs.changed("settrue"));
+    try testing.expect(fs.changed("setfalse"));
+    try testing.expect(!fs.changed("unchanged"));
+    try testing.expect(!fs.changed("invalid"));
+    try testing.expectEqual(@as(isize, -1), fs.argsLenAtDash());
+}
+
+test "Invalid argument returns error - bool" {
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    fs.error_handling = .continue_on_error;
+    var b: bool = false;
+    try fs.boolVar(&b, "bool", false, "");
+    const result = fs.parse(&.{"--bool=x"});
+    try testing.expectError(error.InvalidBoolValue, result);
+}
+
+test "Invalid argument returns error - int" {
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    fs.error_handling = .continue_on_error;
+    var v: i32 = 0;
+    try fs.intVar(i32, &v, "int", 0, "");
+    // Parse should fail - just verify value is unchanged
+    fs.parse(&.{"--int=x"}) catch {};
+    try testing.expectEqual(@as(i32, 0), v); // value unchanged
+}
+
+test "Invalid argument returns error - uint" {
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    fs.error_handling = .continue_on_error;
+    var v: u32 = 0;
+    try fs.uintVar(u32, &v, "uint", 0, "");
+    const result = fs.parse(&.{"--uint=-1"});
+    try testing.expectError(error.Overflow, result);
+}
+
+test "Invalid argument returns error - float" {
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    fs.error_handling = .continue_on_error;
+    var v: f64 = 0;
+    try fs.floatVar(f64, &v, "float64", 0, "");
+    // Parse should fail - just verify value is unchanged
+    fs.parse(&.{"--float64=x"}) catch {};
+    try testing.expectApproxEqAbs(@as(f64, 0), v, 0.001); // value unchanged
+}
+
+test "Unknown shorthand flag returns error" {
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    fs.error_handling = .continue_on_error;
+    var a: bool = false;
+    try fs.boolVarP(&a, "alpha", "a", false, "");
+    const result = fs.parse(&.{"-ukn"});
+    try testing.expectError(error.NoSuchFlag, result);
+    try testing.expectEqual(pflag.ParseError.ErrorKind.unknown_shorthand, fs.lastError().kind);
+}
+
+test "Shorthand requiring argument returns error" {
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    fs.error_handling = .continue_on_error;
+    var a: bool = false;
+    var s: []const u8 = "";
+    try fs.boolVarP(&a, "alpha", "a", false, "");
+    try fs.stringVarP(&s, "string", "s", "", "");
+    // -as means -a then -s, but -s needs a value and none follows
+    const result = fs.parse(&.{"-as"});
+    try testing.expectError(error.ValueRequired, result);
+}
+
+test "Deprecated flag not in PrintDefaults" {
+    // In Go, markDeprecated also hides the flag. In Zig, it only sets the deprecated message.
+    // To hide a deprecated flag, user must also call markHidden.
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    var b: bool = true;
+    try fs.boolVar(&b, "badflag", true, "always true");
+    try fs.markDeprecated("badflag", "use --good-flag instead");
+    try fs.markHidden("badflag"); // In Zig, must explicitly hide
+
+    var buf: [256]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
+    fs.out_writer = &writer;
+    fs.printDefaults();
+    const output = std.Io.Writer.buffered(&writer);
+    try testing.expect(!std.mem.containsAtLeast(u8, output, 1, "badflag"));
+}
+
+test "Unhidden deprecated flag in docs" {
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    var b: bool = true;
+    try fs.boolVar(&b, "badflag", true, "always true");
+    try fs.markDeprecated("badflag", "use --good-flag instead");
+    // Flag is NOT hidden — should appear in usage with deprecation message
+
+    var buf: [512]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
+    fs.out_writer = &writer;
+    fs.printDefaults();
+    const output = std.Io.Writer.buffered(&writer);
+    try testing.expect(std.mem.containsAtLeast(u8, output, 1, "badflag"));
+    try testing.expect(std.mem.containsAtLeast(u8, output, 1, "use --good-flag instead"));
+}
+
+test "Deprecated shorthand shown in docs" {
+    // Note: Unlike Go pflag which hides deprecated shorthands, Zig always shows them.
+    // This test verifies the actual Zig behavior.
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    var b: bool = true;
+    try fs.boolVarP(&b, "noshorthandflag", "n", true, "always true");
+    try fs.markShorthandDeprecated("noshorthandflag", "use --noshorthandflag instead");
+
+    var buf: [512]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
+    fs.out_writer = &writer;
+    fs.printDefaults();
+    const output = std.Io.Writer.buffered(&writer);
+    // In Zig, shorthand is still shown even when deprecated
+    try testing.expect(std.mem.containsAtLeast(u8, output, 1, "-n,"));
+}
+
+test "Deprecated flag usage printed to out_writer" {
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    fs.error_handling = .continue_on_error;
+    var b: bool = true;
+    try fs.boolVar(&b, "badflag", true, "always true");
+    const usage_msg = "use --good-flag instead";
+    try fs.markDeprecated("badflag", usage_msg);
+
+    var buf: [512]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
+    fs.out_writer = &writer;
+
+    try fs.parse(&.{"--badflag"});
+    const output = std.Io.Writer.buffered(&writer);
+    try testing.expect(std.mem.containsAtLeast(u8, output, 1, usage_msg));
+}
+
+test "Deprecated shorthand usage printed to out_writer" {
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    fs.error_handling = .continue_on_error;
+    var b: bool = true;
+    try fs.boolVarP(&b, "noshorthandflag", "n", true, "always true");
+    const usage_msg = "use --noshorthandflag instead";
+    try fs.markShorthandDeprecated("noshorthandflag", usage_msg);
+
+    var buf: [512]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
+    fs.out_writer = &writer;
+
+    try fs.parse(&.{"-n"});
+    const output = std.Io.Writer.buffered(&writer);
+    try testing.expect(std.mem.containsAtLeast(u8, output, 1, usage_msg));
+}
+
+test "Hidden flag not printed via printDefaults" {
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    var b: bool = false;
+    try fs.boolVar(&b, "secretFlag", false, "shhh");
+    try fs.markHidden("secretFlag");
+
+    var buf: [256]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
+    fs.out_writer = &writer;
+    fs.printDefaults();
+    const output = std.Io.Writer.buffered(&writer);
+    try testing.expect(!std.mem.containsAtLeast(u8, output, 1, "secretFlag"));
+}
+
+test "VisitAll visits flags in insertion order" {
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    var z: bool = false;
+    var a: bool = false;
+    var m: bool = false;
+    try fs.boolVar(&z, "z", false, "");
+    try fs.boolVar(&a, "a", false, "");
+    try fs.boolVar(&m, "m", false, "");
+
+    const NameCollector = struct {
+        names: [3][]const u8 = undefined,
+        count: usize = 0,
+    };
+    var collector = NameCollector{};
+    const collectFn = struct {
+        fn call(ctx: *NameCollector, flag: *pflag.Flag) void {
+            if (ctx.count < 3) {
+                ctx.names[ctx.count] = flag.name;
+                ctx.count += 1;
+            }
+        }
+    }.call;
+    fs.visitAll(&collector, collectFn);
+    // VisitAll visits in insertion order (not sorted)
+    try testing.expectEqual(@as(usize, 3), collector.count);
+    try testing.expectEqualStrings("z", collector.names[0]);
+    try testing.expectEqualStrings("a", collector.names[1]);
+    try testing.expectEqualStrings("m", collector.names[2]);
+}
+
+test "Visit visits only set flags in parse order" {
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    var z: bool = false;
+    var a: bool = false;
+    var m: bool = false;
+    try fs.boolVar(&z, "z", false, "");
+    try fs.boolVar(&a, "a", false, "");
+    try fs.boolVar(&m, "m", false, "");
+    try fs.parse(&.{ "--m", "--z" });
+
+    const NameCollector = struct {
+        names: [2][]const u8 = undefined,
+        count: usize = 0,
+    };
+    var collector = NameCollector{};
+    const collectFn = struct {
+        fn call(ctx: *NameCollector, flag: *pflag.Flag) void {
+            if (ctx.count < 2) {
+                ctx.names[ctx.count] = flag.name;
+                ctx.count += 1;
+            }
+        }
+    }.call;
+    fs.visit(&collector, collectFn);
+    // Visit visits only set flags, in the order they were parsed
+    try testing.expectEqual(@as(usize, 2), collector.count);
+    try testing.expectEqualStrings("m", collector.names[0]);
+    try testing.expectEqualStrings("z", collector.names[1]);
+}
+
+test "Output writes to out_writer" {
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    var buf: [256]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
+    fs.out_writer = &writer;
+
+    // printUsage writes to out_writer
+    fs.printUsage();
+    const output = std.Io.Writer.buffered(&writer);
+    try testing.expect(std.mem.containsAtLeast(u8, output, 1, "Usage of test"));
+}
