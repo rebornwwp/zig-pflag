@@ -13,6 +13,14 @@
 //!   slice_types.zig  — String/Int slice types
 //!   map_types.zig    — String→Int / String→String map types
 
+// When building tests, pull in pflag_test.zig so its test blocks are collected.
+// builtin.is_test is true only when compiling via `zig test`.
+comptime {
+    if (@import("builtin").is_test) {
+        _ = @import("pflag_test.zig");
+    }
+}
+
 const std = @import("std");
 
 // ─── Error types ───

@@ -1,7 +1,7 @@
 //! Core FlagSet tests for pflag. Ported from Go's spf13/pflag flag_test.go v1.0.9.
 //! Type-specific tests are in their respective *_types.zig files.
 const std = @import("std");
-const pflag = @import("pflag");
+const pflag = @import("pflag.zig");
 const testing = std.testing;
 
 const FlagSet = pflag.FlagSet;

@@ -67,28 +67,30 @@ pub fn uintValue(comptime T: type, val: T, p: *T) Value {
 
 test "UintVar" {
     const TestCase = struct {
+        flag_name: []const u8,
+        shorthand: ?[]const u8 = null,
         input: []const []const u8,
         expected: u32,
     };
 
     const testCases = [_]TestCase{
-        .{ .input = &.{"--count=42"}, .expected = 42 },
-        .{ .input = &.{ "-p", "8080" }, .expected = 8080 },
-        .{ .input = &.{"--count=0x2a"}, .expected = 42 }, // hex
-        .{ .input = &.{"--count=0o52"}, .expected = 42 }, // octal
+        .{ .flag_name = "count", .input = &.{"--count=42"}, .expected = 42 },
+        .{ .flag_name = "port", .shorthand = "p", .input = &.{ "-p", "8080" }, .expected = 8080 },
+        .{ .flag_name = "count", .input = &.{"--count=0x2a"}, .expected = 42 }, // hex
+        .{ .flag_name = "count", .input = &.{"--count=0o52"}, .expected = 42 }, // octal
     };
 
-    for (testCases, 0..) |tc, i| {
-        var count: u32 = 0;
+    for (testCases) |tc| {
+        var val: u32 = 0;
         var fs = pflag.FlagSet.init(std.testing.allocator, "test");
         defer fs.deinit();
-        if (i == 0) {
-            try fs.uintVar(u32, &count, "count", 0, "");
+        if (tc.shorthand) |sh| {
+            try fs.uintVarP(u32, &val, tc.flag_name, sh, 0, "");
         } else {
-            try fs.uintVarP(u32, &count, "port", "p", 0, "");
+            try fs.uintVar(u32, &val, tc.flag_name, 0, "");
         }
         try fs.parse(tc.input);
-        try std.testing.expectEqual(tc.expected, count);
+        try std.testing.expectEqual(tc.expected, val);
     }
 }
 

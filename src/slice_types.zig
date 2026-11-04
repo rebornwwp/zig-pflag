@@ -237,7 +237,14 @@ fn intSliceVtable(comptime T: type) Value.VTable {
         .set = struct {
             fn set(ptr: *anyopaque, v: []const u8) !void {
                 const state: *SliceState(T) = @ptrCast(@alignCast(ptr));
-                try state.value.append(state.gpa, try std.fmt.parseInt(T, v, 0));
+                // Split by comma and parse each value
+                var it = std.mem.splitScalar(u8, v, ',');
+                while (it.next()) |part| {
+                    const trimmed = std.mem.trim(u8, part, " \t");
+                    if (trimmed.len > 0) {
+                        try state.value.append(state.gpa, try std.fmt.parseInt(T, trimmed, 0));
+                    }
+                }
             }
         }.set,
         .string = struct {
@@ -286,7 +293,14 @@ fn uintSliceVtable(comptime T: type) Value.VTable {
         .set = struct {
             fn set(ptr: *anyopaque, v: []const u8) !void {
                 const state: *SliceState(T) = @ptrCast(@alignCast(ptr));
-                try state.value.append(state.gpa, try std.fmt.parseInt(T, v, 0));
+                // Split by comma and parse each value
+                var it = std.mem.splitScalar(u8, v, ',');
+                while (it.next()) |part| {
+                    const trimmed = std.mem.trim(u8, part, " \t");
+                    if (trimmed.len > 0) {
+                        try state.value.append(state.gpa, try std.fmt.parseInt(T, trimmed, 0));
+                    }
+                }
             }
         }.set,
         .string = struct {
@@ -353,6 +367,7 @@ const boolSliceVtable = Value.VTable{
             const parsed = try readAsCSV(gpa, unquoted.items);
             defer {
                 for (parsed) |s| gpa.free(s);
+                gpa.free(parsed);
             }
 
             // Parse boolean values into slice
@@ -399,7 +414,14 @@ fn floatSliceVtable(comptime T: type) Value.VTable {
         .set = struct {
             fn set(ptr: *anyopaque, v: []const u8) !void {
                 const state: *SliceState(T) = @ptrCast(@alignCast(ptr));
-                try state.value.append(state.gpa, try std.fmt.parseFloat(T, v));
+                // Split by comma and parse each value
+                var it = std.mem.splitScalar(u8, v, ',');
+                while (it.next()) |part| {
+                    const trimmed = std.mem.trim(u8, part, " \t");
+                    if (trimmed.len > 0) {
+                        try state.value.append(state.gpa, try std.fmt.parseFloat(T, trimmed));
+                    }
+                }
             }
         }.set,
         .string = struct {
@@ -555,6 +577,7 @@ test "readAsCSV - basic parsing" {
     try std.testing.expectEqualStrings("b", simple[1]);
     try std.testing.expectEqualStrings("c", simple[2]);
     for (simple) |s| gpa.free(s);
+    gpa.free(simple);
 
     // Quoted field with comma
     const quoted = try readAsCSV(gpa, "\"one,two\",three");
@@ -562,6 +585,7 @@ test "readAsCSV - basic parsing" {
     try std.testing.expectEqualStrings("one,two", quoted[0]);
     try std.testing.expectEqualStrings("three", quoted[1]);
     for (quoted) |s| gpa.free(s);
+    gpa.free(quoted);
 
     // Escaped quotes
     const escaped = try readAsCSV(gpa, "\"a\"\"b\",c");
@@ -569,6 +593,7 @@ test "readAsCSV - basic parsing" {
     try std.testing.expectEqualStrings("a\"b", escaped[0]);
     try std.testing.expectEqualStrings("c", escaped[1]);
     for (escaped) |s| gpa.free(s);
+    gpa.free(escaped);
 }
 
 test "writeAsCSV - basic output" {
@@ -652,7 +677,7 @@ test "BoolSlice" {
     var state = pflag.SliceState(bool){ .value = &slice, .gpa = std.testing.allocator };
     var fs = pflag.FlagSet.init(std.testing.allocator, "test");
     defer fs.deinit();
-    try fs.boolSliceVar(bool, &state, "flags", &.{}, "");
+    try fs.boolSliceVar(&state, "flags", &.{}, "");
     try fs.parse(&.{ "--flags=true", "--flags=false", "--flags=1" });
     try std.testing.expectEqual(@as(usize, 3), slice.items.len);
     try std.testing.expect(slice.items[0]);
@@ -665,7 +690,7 @@ test "BoolSlice CalledTwice - multiple Set calls append" {
     var state = pflag.SliceState(bool){ .value = &slice, .gpa = std.testing.allocator };
     var fs = pflag.FlagSet.init(std.testing.allocator, "test");
     defer fs.deinit();
-    try fs.boolSliceVar(bool, &state, "flags", &.{}, "");
+    try fs.boolSliceVar(&state, "flags", &.{}, "");
     try fs.parse(&.{ "--flags=true,false", "--flags=1,0" });
     try std.testing.expectEqual(@as(usize, 4), slice.items.len);
     try std.testing.expect(slice.items[0]);
@@ -679,7 +704,7 @@ test "BoolSlice WithDefault - preserves defaults when not set" {
     var state = pflag.SliceState(bool){ .value = &slice, .gpa = std.testing.allocator };
     var fs = pflag.FlagSet.init(std.testing.allocator, "test");
     defer fs.deinit();
-    try fs.boolSliceVar(bool, &state, "flags", &.{ false, true }, "");
+    try fs.boolSliceVar(&state, "flags", &.{ false, true }, "");
     try fs.parse(&.{});
     try std.testing.expectEqual(@as(usize, 2), slice.items.len);
     try std.testing.expect(!slice.items[0]);
@@ -708,7 +733,7 @@ test "BoolSlice BadQuoting - handles quotes and spaces like Go" {
         var state = pflag.SliceState(bool){ .value = &slice, .gpa = std.testing.allocator };
         var fs = pflag.FlagSet.init(std.testing.allocator, "test");
         defer fs.deinit();
-        try fs.boolSliceVar(bool, &state, "flags", &.{}, "");
+        try fs.boolSliceVar(&state, "flags", &.{}, "");
         const arg = try std.fmt.allocPrint(std.testing.allocator, "--flags={s}", .{tc.input});
         defer std.testing.allocator.free(arg);
         try fs.parse(&.{arg});

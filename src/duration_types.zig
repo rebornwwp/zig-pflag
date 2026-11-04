@@ -99,7 +99,9 @@ test "DurationVar" {
         var fs = pflag.FlagSet.init(std.testing.allocator, "test");
         defer fs.deinit();
         try fs.durationVar(&d, "timeout", 0, "");
-        try fs.parse(&.{std.fmt.comptimePrint("--timeout={s}", .{tc.input})});
+        const arg = try std.fmt.allocPrint(std.testing.allocator, "--timeout={s}", .{tc.input});
+        defer std.testing.allocator.free(arg);
+        try fs.parse(&.{arg});
         try std.testing.expectEqual(tc.expected, d);
     }
 }

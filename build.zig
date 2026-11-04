@@ -16,14 +16,14 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(lib);
 
-    // Tests
+    // Tests — root is pflag.zig so all *_types.zig test blocks are collected.
+    // pflag.zig conditionally imports pflag_test.zig when building tests.
     const test_mod = b.createModule(.{
-        .root_source_file = b.path("src/pflag_test.zig"),
+        .root_source_file = b.path("src/pflag.zig"),
         .target = target,
         .optimize = optimize,
     });
     const tests = b.addTest(.{ .root_module = test_mod });
-    tests.root_module.addImport("pflag", lib_mod);
 
     const run_tests = b.addRunArtifact(tests);
     run_tests.step.dependOn(&lib.step);

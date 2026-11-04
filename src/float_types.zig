@@ -67,7 +67,9 @@ test "FloatVar" {
         var fs = pflag.FlagSet.init(std.testing.allocator, "test");
         defer fs.deinit();
         try fs.floatVar(f64, &val, "rate", 0.0, "the rate");
-        try fs.parse(&.{std.fmt.comptimePrint("--rate={s}", .{tc.input})});
+        const arg = try std.fmt.allocPrint(std.testing.allocator, "--rate={s}", .{tc.input});
+        defer std.testing.allocator.free(arg);
+        try fs.parse(&.{arg});
         try std.testing.expectApproxEqRel(tc.expected, val, @as(f64, @floatCast(0.001)));
     }
 }
