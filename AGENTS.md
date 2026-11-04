@@ -20,11 +20,13 @@ zig build run-int_gpa                       # 运行单个示例(每个示例都
 zig fmt --check src/ examples/ build.zig    # CI 的格式检查(范围不含根目录其他文件)
 ```
 
-没有单测过滤命令。要跑单个测试,直接用模块语法绕过 build.zig:
+没有单测过滤命令。要跑单个测试或查看测试数量,直接用模块语法绕过 build.zig:
 
 ```bash
-zig test --dep pflag -Mroot=src/pflag_test.zig -Mpflag=src/pflag.zig
+zig test --dep pflag -Mroot=src/pflag.zig -Mpflag=src/pflag.zig
 ```
+
+这会输出 `All 163 tests passed.` 显示测试总数。
 
 改动后必须至少跑 `zig build test` + `zig build build-examples`(CI 检查:fmt → test → build-examples → build)。
 
