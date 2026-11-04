@@ -74,6 +74,8 @@ test "UintVar" {
     const testCases = [_]TestCase{
         .{ .input = &.{"--count=42"}, .expected = 42 },
         .{ .input = &.{ "-p", "8080" }, .expected = 8080 },
+        .{ .input = &.{"--count=0x2a"}, .expected = 42 }, // hex
+        .{ .input = &.{"--count=0o52"}, .expected = 42 }, // octal
     };
 
     for (testCases, 0..) |tc, i| {

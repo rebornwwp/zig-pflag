@@ -76,6 +76,8 @@ test "IntVar" {
         .{ .input = &.{ "--count", "99" }, .expected = 99 },
         .{ .input = &.{"--count=0"}, .expected = 0 },
         .{ .input = &.{"--count=-42"}, .expected = -42 },
+        .{ .input = &.{"--count=0x2a"}, .expected = 42 }, // hex
+        .{ .input = &.{"--count=0o52"}, .expected = 42 }, // octal
     };
 
     for (testCases) |tc| {

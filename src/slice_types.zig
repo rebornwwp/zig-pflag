@@ -34,6 +34,93 @@ pub const StringSliceState = struct {
     changed: bool = false,
 };
 
+/// Parse CSV-formatted string into array of strings.
+/// Matches Go's csv.NewReader behavior:
+/// - Quoted fields: "one,two" → one,two
+/// - Escaped quotes: "" → "
+pub fn readAsCSV(gpa: std.mem.Allocator, val: []const u8) ![]const []const u8 {
+    if (val.len == 0) return &.{};
+
+    var result: std.ArrayListUnmanaged([]const u8) = .empty;
+    errdefer {
+        for (result.items) |s| gpa.free(s);
+        result.deinit(gpa);
+    }
+
+    var i: usize = 0;
+    while (i < val.len) {
+        var field: std.ArrayListUnmanaged(u8) = .empty;
+        defer field.deinit(gpa);
+
+        if (val[i] == '"') {
+            // Quoted field
+            i += 1; // skip opening quote
+            while (i < val.len) {
+                if (val[i] == '"') {
+                    if (i + 1 < val.len and val[i + 1] == '"') {
+                        // Escaped quote
+                        try field.append(gpa, '"');
+                        i += 2;
+                    } else {
+                        // End of quoted field
+                        i += 1; // skip closing quote
+                        break;
+                    }
+                } else {
+                    try field.append(gpa, val[i]);
+                    i += 1;
+                }
+            }
+            // Skip to comma or end
+            while (i < val.len and val[i] != ',') i += 1;
+            if (i < val.len) i += 1; // skip comma
+        } else {
+            // Unquoted field
+            while (i < val.len and val[i] != ',') {
+                try field.append(gpa, val[i]);
+                i += 1;
+            }
+            if (i < val.len) i += 1; // skip comma
+        }
+
+        const item = try gpa.dupe(u8, field.items);
+        result.append(gpa, item) catch |err| {
+            gpa.free(item);
+            return err;
+        };
+    }
+
+    return try result.toOwnedSlice(gpa);
+}
+
+/// Write array of strings as CSV format.
+/// Matches Go's csv.Writer behavior.
+pub fn writeAsCSV(gpa: std.mem.Allocator, vals: []const []const u8) ![]const u8 {
+    var buf: std.ArrayListUnmanaged(u8) = .empty;
+    errdefer buf.deinit(gpa);
+
+    for (vals, 0..) |s, i| {
+        if (i > 0) try buf.appendSlice(gpa, ",");
+        // Quote if contains comma, quote, or newline
+        const needs_quote = std.mem.indexOfAny(u8, s, ",\"\n") != null;
+        if (needs_quote) {
+            try buf.appendSlice(gpa, "\"");
+            for (s) |c| {
+                if (c == '"') {
+                    try buf.appendSlice(gpa, "\"\"");
+                } else {
+                    try buf.append(gpa, c);
+                }
+            }
+            try buf.appendSlice(gpa, "\"");
+        } else {
+            try buf.appendSlice(gpa, s);
+        }
+    }
+
+    return try buf.toOwnedSlice(gpa);
+}
+
 const stringSliceVtable = Value.VTable{
     .set = struct {
         fn set(ptr: *anyopaque, v: []const u8) !void {
@@ -49,16 +136,18 @@ const stringSliceVtable = Value.VTable{
                 for (slice.items[items_before..]) |item| gpa.free(item);
                 slice.shrinkRetainingCapacity(items_before);
             }
-            var it = std.mem.splitScalar(u8, v, ',');
-            while (it.next()) |part| {
-                const trimmed = std.mem.trim(u8, part, " \t");
-                const item = try gpa.dupe(u8, trimmed);
-                // Catch: dupe succeeded but append may fail — free item to avoid leak
+            // Use CSV parsing for comma-separated values
+            const parsed = try readAsCSV(gpa, v);
+            // Transfer ownership: parsed items are now owned by slice
+            for (parsed) |item| {
                 slice.append(gpa, item) catch |err| {
-                    gpa.free(item);
+                    // Free remaining items on error
+                    for (parsed) |s| gpa.free(s);
                     return err;
                 };
             }
+            // Free the parsed array container (but not the strings, they're now in slice)
+            gpa.free(parsed);
             if (!state.changed) state.changed = true;
         }
     }.set,
@@ -66,12 +155,7 @@ const stringSliceVtable = Value.VTable{
         fn string(ptr: *anyopaque, gpa: std.mem.Allocator) anyerror![]const u8 {
             const state: *StringSliceState = @ptrCast(@alignCast(ptr));
             const slice = state.value;
-            var buf: std.ArrayListUnmanaged(u8) = .empty;
-            for (slice.items, 0..) |s, i| {
-                if (i > 0) try buf.appendSlice(gpa, ",");
-                try buf.appendSlice(gpa, s);
-            }
-            return try buf.toOwnedSlice(gpa);
+            return try writeAsCSV(gpa, slice.items);
         }
     }.string,
     .typeName = struct {
@@ -405,6 +489,91 @@ test "StringSlice WithDefault - preserves defaults when not set" {
     try std.testing.expectEqualStrings("default2", slice.items[1]);
 }
 
+test "StringSlice SquareBrackets - quoted brackets preserved" {
+    // Matches Go's TestSSWithSquareBrackets
+    var slice: std.ArrayListUnmanaged([]const u8) = .empty;
+    var state = pflag.StringSliceState{ .value = &slice, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.stringSliceVar(&state, "ss", &.{}, "");
+    // Quoted square brackets should be preserved as part of the value
+    try fs.parse(&.{ "--ss=\"[a-z]\"", "--ss=\"[a-z]+\"" });
+    try std.testing.expectEqual(@as(usize, 2), slice.items.len);
+    try std.testing.expectEqualStrings("[a-z]", slice.items[0]);
+    try std.testing.expectEqualStrings("[a-z]+", slice.items[1]);
+}
+
+test "StringSlice WithComma - quoted commas preserved" {
+    // Matches Go's TestSSWithComma
+    var slice: std.ArrayListUnmanaged([]const u8) = .empty;
+    var state = pflag.StringSliceState{ .value = &slice, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.stringSliceVar(&state, "ss", &.{}, "");
+    // Go test: in := []string{`"one,two"`, `"three"`, `"four,five",six`}
+    // expected := []string{"one,two", "three", "four,five", "six"}
+    try fs.parse(&.{ "--ss=\"one,two\"", "--ss=\"three\"", "--ss=\"four,five\",six" });
+    try std.testing.expectEqual(@as(usize, 4), slice.items.len);
+    try std.testing.expectEqualStrings("one,two", slice.items[0]);
+    try std.testing.expectEqualStrings("three", slice.items[1]);
+    try std.testing.expectEqualStrings("four,five", slice.items[2]);
+    try std.testing.expectEqualStrings("six", slice.items[3]);
+}
+
+test "readAsCSV - basic parsing" {
+    const gpa = std.testing.allocator;
+
+    // Empty string
+    const empty = try readAsCSV(gpa, "");
+    try std.testing.expectEqual(@as(usize, 0), empty.len);
+
+    // Simple comma-separated
+    const simple = try readAsCSV(gpa, "a,b,c");
+    try std.testing.expectEqual(@as(usize, 3), simple.len);
+    try std.testing.expectEqualStrings("a", simple[0]);
+    try std.testing.expectEqualStrings("b", simple[1]);
+    try std.testing.expectEqualStrings("c", simple[2]);
+    for (simple) |s| gpa.free(s);
+
+    // Quoted field with comma
+    const quoted = try readAsCSV(gpa, "\"one,two\",three");
+    try std.testing.expectEqual(@as(usize, 2), quoted.len);
+    try std.testing.expectEqualStrings("one,two", quoted[0]);
+    try std.testing.expectEqualStrings("three", quoted[1]);
+    for (quoted) |s| gpa.free(s);
+
+    // Escaped quotes
+    const escaped = try readAsCSV(gpa, "\"a\"\"b\",c");
+    try std.testing.expectEqual(@as(usize, 2), escaped.len);
+    try std.testing.expectEqualStrings("a\"b", escaped[0]);
+    try std.testing.expectEqualStrings("c", escaped[1]);
+    for (escaped) |s| gpa.free(s);
+}
+
+test "writeAsCSV - basic output" {
+    const gpa = std.testing.allocator;
+
+    // Empty
+    const empty = try writeAsCSV(gpa, &.{});
+    try std.testing.expectEqualStrings("", empty);
+    gpa.free(empty);
+
+    // Simple
+    const simple = try writeAsCSV(gpa, &.{ "a", "b", "c" });
+    try std.testing.expectEqualStrings("a,b,c", simple);
+    gpa.free(simple);
+
+    // With comma (needs quoting)
+    const quoted = try writeAsCSV(gpa, &.{ "one,two", "three" });
+    try std.testing.expectEqualStrings("\"one,two\",three", quoted);
+    gpa.free(quoted);
+
+    // With quote (needs escaping)
+    const escaped = try writeAsCSV(gpa, &.{ "a\"b", "c" });
+    try std.testing.expectEqualStrings("\"a\"\"b\",c", escaped);
+    gpa.free(escaped);
+}
+
 test "IntSlice" {
     const TestCase = struct {
         input: []const []const u8,
@@ -572,6 +741,19 @@ test "UintSlice WithDefault - preserves defaults when not set" {
     try std.testing.expectEqual(@as(usize, 2), slice.items.len);
     try std.testing.expectEqual(@as(u32, 0), slice.items[0]);
     try std.testing.expectEqual(@as(u32, 1), slice.items[1]);
+}
+
+test "UintSlice Hex - parses 0x prefixed values" {
+    var slice: std.ArrayListUnmanaged(u32) = .empty;
+    var state = pflag.SliceState(u32){ .value = &slice, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.uintSliceVar(u32, &state, "nums", &.{}, "");
+    try fs.parse(&.{"--nums=0x1,0x2,0x10"});
+    try std.testing.expectEqual(@as(usize, 3), slice.items.len);
+    try std.testing.expectEqual(@as(u32, 1), slice.items[0]);
+    try std.testing.expectEqual(@as(u32, 2), slice.items[1]);
+    try std.testing.expectEqual(@as(u32, 16), slice.items[2]);
 }
 
 test "StringArray" {
