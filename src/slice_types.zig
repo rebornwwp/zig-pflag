@@ -338,8 +338,29 @@ const boolSliceVtable = Value.VTable{
     .set = struct {
         fn set(ptr: *anyopaque, v: []const u8) !void {
             const state: *SliceState(bool) = @ptrCast(@alignCast(ptr));
-            const b = try bool_types.parseBool(v);
-            try state.value.append(state.gpa, b);
+            const gpa = state.gpa;
+
+            // Remove all quote characters (matches Go: strings.NewReplacer(`"`, "", `'`, "", "`", ""))
+            var unquoted: std.ArrayListUnmanaged(u8) = .empty;
+            defer unquoted.deinit(gpa);
+            for (v) |c| {
+                if (c != '"' and c != '\'' and c != '`') {
+                    try unquoted.append(gpa, c);
+                }
+            }
+
+            // Parse with CSV reader
+            const parsed = try readAsCSV(gpa, unquoted.items);
+            defer {
+                for (parsed) |s| gpa.free(s);
+            }
+
+            // Parse boolean values into slice
+            for (parsed) |bool_str| {
+                const trimmed = std.mem.trim(u8, bool_str, " \t");
+                const b = try bool_types.parseBool(trimmed);
+                try state.value.append(gpa, b);
+            }
         }
     }.set,
     .string = struct {
@@ -663,6 +684,39 @@ test "BoolSlice WithDefault - preserves defaults when not set" {
     try std.testing.expectEqual(@as(usize, 2), slice.items.len);
     try std.testing.expect(!slice.items[0]);
     try std.testing.expect(slice.items[1]);
+}
+
+test "BoolSlice BadQuoting - handles quotes and spaces like Go" {
+    // Matches Go's TestBSBadQuoting
+    const TestCase = struct {
+        input: []const u8,
+        expected: []const bool,
+    };
+
+    const testCases = [_]TestCase{
+        .{ .input = "1,0,true", .expected = &.{ true, false, true } },
+        .{ .input = "True,F", .expected = &.{ true, false } },
+        .{ .input = "T,0", .expected = &.{ true, false } },
+        .{ .input = "1,0", .expected = &.{ true, false } },
+        .{ .input = "true,false,false", .expected = &.{ true, false, false } },
+        .{ .input = "\"true,false,false,1,0,     T\", false ", .expected = &.{ true, false, false, true, false, true, false } },
+        .{ .input = "\"0, False,  T,false  , true,F\",true", .expected = &.{ false, false, true, false, true, false, true } },
+    };
+
+    for (testCases) |tc| {
+        var slice: std.ArrayListUnmanaged(bool) = .empty;
+        var state = pflag.SliceState(bool){ .value = &slice, .gpa = std.testing.allocator };
+        var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+        defer fs.deinit();
+        try fs.boolSliceVar(bool, &state, "flags", &.{}, "");
+        const arg = try std.fmt.allocPrint(std.testing.allocator, "--flags={s}", .{tc.input});
+        defer std.testing.allocator.free(arg);
+        try fs.parse(&.{arg});
+        try std.testing.expectEqual(tc.expected.len, slice.items.len);
+        for (tc.expected, 0..) |exp, i| {
+            try std.testing.expectEqual(exp, slice.items[i]);
+        }
+    }
 }
 
 test "FloatSlice" {

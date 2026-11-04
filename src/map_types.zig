@@ -318,3 +318,31 @@ test "StringToString WithDefault - preserves defaults when not set" {
     try std.testing.expectEqualStrings("1", map.get("a").?);
     try std.testing.expectEqualStrings("2", map.get("b").?);
 }
+
+test "StringToString NilDefault - empty map default works like Go nil" {
+    // Matches Go's TestS2SNilDefault
+    // In Go: f.StringToStringVar(&s2s, "s2s", nil, "Command separated ls!")
+    // In Zig: we use empty map .{} instead of nil - behavior is equivalent
+    var map: std.StringHashMapUnmanaged([]const u8) = .empty;
+    var state = pflag.StringToStringState{ .value = &map, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.stringToStringVar(&state, "s2s", "", "Command separated ls!");
+    try fs.parse(&.{"--s2s=a=1,b=2"});
+    try std.testing.expectEqual(@as(u32, 2), map.count());
+    try std.testing.expectEqualStrings("1", map.get("a").?);
+    try std.testing.expectEqualStrings("2", map.get("b").?);
+}
+
+test "StringToInt NilDefault - empty map default works like Go nil" {
+    // Same as StringToString NilDefault - empty map replaces nil
+    var map: std.StringHashMapUnmanaged(i32) = .empty;
+    var state = pflag.StringToIntState(i32){ .value = &map, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.stringToIntVar(i32, &state, "s2i", 0, "Command separated list!");
+    try fs.parse(&.{"--s2i=a=1,b=2"});
+    try std.testing.expectEqual(@as(u32, 2), map.count());
+    try std.testing.expectEqual(@as(i32, 1), map.get("a").?);
+    try std.testing.expectEqual(@as(i32, 2), map.get("b").?);
+}
