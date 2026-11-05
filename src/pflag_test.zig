@@ -1654,3 +1654,18 @@ test "parseArgLoop handles mixed long and short flags with values" {
     try testing.expectEqual(@as(i32, 42), count);
     try testing.expectEqualStrings("result.txt", output);
 }
+
+test "FlagUsagesWrapped with cols=0 skips wrapping" {
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    var val: bool = false;
+    try fs.boolVar(&val, "verbose", false, "this is a very long usage that would normally wrap but should not when cols is zero");
+
+    // With cols=0, wrapping should be skipped
+    const text = fs.flagUsagesWrapped(0);
+    defer testing.allocator.free(text);
+
+    // Should contain the full usage text on one line (no wrapping)
+    try testing.expect(std.mem.containsAtLeast(u8, text, 1, "verbose"));
+    try testing.expect(std.mem.containsAtLeast(u8, text, 1, "would normally wrap"));
+}

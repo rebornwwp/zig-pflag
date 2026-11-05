@@ -87,3 +87,18 @@ test "CountVar" {
         }
     }
 }
+
+test "Count string() output" {
+    // Verify string() works correctly for count values
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    var c: i32 = 0;
+    try fs.countVarP(&c, "verbose", "v", 0, "");
+    try fs.parse(&.{"-vvv"});
+    try std.testing.expectEqual(@as(i32, 3), c);
+
+    const flag = fs.lookup("verbose").?;
+    const str = try flag.value.string(std.testing.allocator);
+    defer std.testing.allocator.free(str);
+    try std.testing.expectEqualStrings("3", str);
+}

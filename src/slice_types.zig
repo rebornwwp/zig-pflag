@@ -1230,6 +1230,24 @@ test "StringArray WithSquareBrackets - preserves brackets" {
     try std.testing.expectEqualStrings("[a-z]+", slice.items[2]);
 }
 
+test "StringArray string() output" {
+    // Verify string() works correctly for string array values
+    var slice: std.ArrayListUnmanaged([]const u8) = .empty;
+    var state = pflag.StringArrayState{ .value = &slice, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.stringArrayVar(&state, "sa", &.{}, "");
+    try fs.parse(&.{ "--sa=hello", "--sa=world" });
+    try std.testing.expectEqual(@as(usize, 2), slice.items.len);
+
+    const flag = fs.lookup("sa").?;
+    const str = try flag.value.string(std.testing.allocator);
+    defer std.testing.allocator.free(str);
+    // StringArray uses comma separator (not CSV)
+    try std.testing.expect(std.mem.indexOf(u8, str, "hello") != null);
+    try std.testing.expect(std.mem.indexOf(u8, str, "world") != null);
+}
+
 test "StringToInt Empty - parses no args" {
     // Matches Go TestEmptyS2I
     var map: std.StringHashMapUnmanaged(i32) = .empty;
