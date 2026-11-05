@@ -1080,3 +1080,82 @@ test "StringArray WithDefault - preserves defaults when not set" {
     try std.testing.expectEqualStrings("default1", slice.items[0]);
     try std.testing.expectEqualStrings("default2", slice.items[1]);
 }
+
+test "StringArray Empty value - parses --sa= as empty string" {
+    // StringArray appends empty string for --sa= (matches Go source behavior)
+    var slice: std.ArrayListUnmanaged([]const u8) = .empty;
+    var state = pflag.StringArrayState{ .value = &slice, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.stringArrayVar(&state, "sa", &.{}, "");
+    try fs.parse(&.{"--sa="});
+    try std.testing.expectEqual(@as(usize, 1), slice.items.len);
+    try std.testing.expectEqualStrings("", slice.items[0]);
+}
+
+test "StringArray WithDefault - parses value overriding defaults" {
+    // Matches Go TestSAWithDefault
+    var slice: std.ArrayListUnmanaged([]const u8) = .empty;
+    var state = pflag.StringArrayState{ .value = &slice, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.stringArrayVar(&state, "sa", &.{ "default", "values" }, "");
+    try fs.parse(&.{"--sa=one"});
+    try std.testing.expectEqual(@as(usize, 1), slice.items.len);
+    try std.testing.expectEqualStrings("one", slice.items[0]);
+}
+
+test "StringArray WithSpecialChar - preserves commas and quotes" {
+    // Matches Go TestSAWithSpecialChar
+    var slice: std.ArrayListUnmanaged([]const u8) = .empty;
+    var state = pflag.StringArrayState{ .value = &slice, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.stringArrayVar(&state, "sa", &.{}, "");
+    try fs.parse(&.{ "--sa=one,two", "--sa=\"three\"", "--sa=\"four,five\",six", "--sa=seven eight" });
+    try std.testing.expectEqual(@as(usize, 4), slice.items.len);
+    try std.testing.expectEqualStrings("one,two", slice.items[0]);
+    try std.testing.expectEqualStrings("\"three\"", slice.items[1]);
+    try std.testing.expectEqualStrings("\"four,five\",six", slice.items[2]);
+    try std.testing.expectEqualStrings("seven eight", slice.items[3]);
+}
+
+test "StringArray WithSquareBrackets - preserves brackets" {
+    // Matches Go TestSAWithSquareBrackets
+    var slice: std.ArrayListUnmanaged([]const u8) = .empty;
+    var state = pflag.StringArrayState{ .value = &slice, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.stringArrayVar(&state, "sa", &.{}, "");
+    try fs.parse(&.{ "--sa=][]-[", "--sa=[a-z]", "--sa=[a-z]+" });
+    try std.testing.expectEqual(@as(usize, 3), slice.items.len);
+    try std.testing.expectEqualStrings("][]-[", slice.items[0]);
+    try std.testing.expectEqualStrings("[a-z]", slice.items[1]);
+    try std.testing.expectEqualStrings("[a-z]+", slice.items[2]);
+}
+
+test "StringToInt Empty - parses no args" {
+    // Matches Go TestEmptyS2I
+    var map: std.StringHashMapUnmanaged(i32) = .empty;
+    var state = pflag.StringToIntState(i32){ .value = &map, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.stringToIntVar(i32, &state, "s2i", 0, "");
+    try fs.parse(&.{});
+    try std.testing.expectEqual(@as(u32, 0), map.count());
+}
+
+test "StringToInt WithDefault - parses value overriding defaults" {
+    // Matches Go TestS2IWithDefault
+    var map: std.StringHashMapUnmanaged(i32) = .empty;
+    var state = pflag.StringToIntState(i32){ .value = &map, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try map.put(std.testing.allocator, "a", 1);
+    try map.put(std.testing.allocator, "b", 2);
+    try fs.stringToIntVar(i32, &state, "s2i", 0, "");
+    try fs.parse(&.{"--s2i=a=3,b=4"});
+    try std.testing.expectEqual(@as(u32, 2), map.count());
+    try std.testing.expectEqual(@as(i32, 3), map.get("a").?);
+    try std.testing.expectEqual(@as(i32, 4), map.get("b").?);
+}
