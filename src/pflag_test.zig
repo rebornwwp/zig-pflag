@@ -1592,3 +1592,28 @@ test "PrintUsage format - with string defaults" {
     try testing.expect(std.mem.containsAtLeast(u8, output, 1, "test"));
     try testing.expect(std.mem.containsAtLeast(u8, output, 1, "Some description"));
 }
+
+test "FlagUsagesWrapped wraps long usage at column boundary" {
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    var val: bool = false;
+    try fs.boolVar(&val, "verbose", false, "this is a very long usage that should definitely wrap at the column boundary we specify");
+
+    // With narrow cols, the usage text should wrap to multiple lines
+    const narrow = fs.flagUsagesWrapped(40);
+    defer testing.allocator.free(narrow);
+
+    // Count newlines — narrow output should have more lines than wide output
+    const narrow_newlines = std.mem.count(u8, narrow, "\n");
+
+    const wide = fs.flagUsagesWrapped(200);
+    defer testing.allocator.free(wide);
+    const wide_newlines = std.mem.count(u8, wide, "\n");
+
+    // Narrow wrapping should produce more newlines than wide
+    try testing.expect(narrow_newlines > wide_newlines);
+
+    // Both should contain the flag name and usage words
+    try testing.expect(std.mem.containsAtLeast(u8, narrow, 1, "verbose"));
+    try testing.expect(std.mem.containsAtLeast(u8, narrow, 1, "wrap"));
+}

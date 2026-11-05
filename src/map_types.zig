@@ -70,10 +70,11 @@ fn strToIntVtableGen(comptime T: type) Value.VTable {
                 while (it.next()) |entry| {
                     if (!first) try buf.appendSlice(gpa, ", ");
                     first = false;
-                    var tmp: [64]u8 = undefined;
                     try buf.appendSlice(gpa, entry.key_ptr.*);
                     try buf.appendSlice(gpa, "=");
-                    try buf.appendSlice(gpa, std.fmt.bufPrint(&tmp, "{d}", .{entry.value_ptr.*}) catch unreachable);
+                    const val_str = try gpa.print("{d}", .{entry.value_ptr.*});
+                    defer gpa.free(val_str);
+                    try buf.appendSlice(gpa, val_str);
                 }
                 return try buf.toOwnedSlice(gpa);
             }
@@ -266,6 +267,25 @@ test "StringToInt rejects non-key=value" {
     fs.error_handling = .continue_on_error;
     try fs.stringToIntVar(i32, &state, "headers", 0, "");
     try std.testing.expectError(error.ExpectedKeyValue, fs.parse(&.{"--headers=badval"}));
+}
+
+test "StringToInt string() output" {
+    // Regression: previously used bufPrint with 64-byte buffer + catch unreachable.
+    // Verify string() works correctly for map values.
+    var map: std.StringHashMapUnmanaged(i32) = .empty;
+    var state = pflag.StringToIntState(i32){ .value = &map, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.stringToIntVar(i32, &state, "headers", 0, "");
+    try fs.parse(&.{"--headers=a=1,b=42"});
+    try std.testing.expectEqual(@as(u32, 2), map.count());
+
+    const flag = fs.lookup("headers").?;
+    const str = try flag.value.string(std.testing.allocator);
+    defer std.testing.allocator.free(str);
+    // Output format: "key=val, key=val" — order may vary with hashmap
+    try std.testing.expect(std.mem.indexOf(u8, str, "a=1") != null);
+    try std.testing.expect(std.mem.indexOf(u8, str, "b=42") != null);
 }
 
 test "StringToString Empty - parses no args" {

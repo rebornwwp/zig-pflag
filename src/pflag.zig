@@ -242,9 +242,12 @@ pub const FlagSet = struct {
         _ = try self.varP(uintValue(T, value, p), name, shorthand, usage);
     }
 
+    /// DEPRECATED: Use `stringStateVar` instead. This legacy form does NOT
+    /// duplicate the string on `set()` — the caller's slice must outlive the FlagSet.
     pub fn stringVar(self: *FlagSet, p: *[]const u8, name: []const u8, value: []const u8, usage: []const u8) !void {
         try self.stringVarP(p, name, "", value, usage);
     }
+    /// DEPRECATED: Use `stringStateVarP` instead. See `stringVar` for details.
     pub fn stringVarP(self: *FlagSet, p: *[]const u8, name: []const u8, shorthand: []const u8, value: []const u8, usage: []const u8) !void {
         _ = try self.varP(stringValue(value, p), name, shorthand, usage);
     }
@@ -529,7 +532,7 @@ pub const FlagSet = struct {
         if (self.usage_callback) |cb| cb(self) else defaultUsage(self);
     }
 
-    fn parseLongArg(self: *FlagSet, s: []const u8, remaining: *std.ArrayListUnmanaged([]const u8)) !void {
+    fn parseLongArg(self: *FlagSet, s: []const u8, remaining: *[]const []const u8) !void {
         var name: []const u8 = undefined;
         var value: []const u8 = undefined;
         var has_value: bool = false;
@@ -559,15 +562,16 @@ pub const FlagSet = struct {
             if (f.no_opt_def_val.len > 0) {
                 // Flag has a default value for when no option is provided (bool=true, count=+1)
                 value = f.no_opt_def_val;
-            } else if (remaining.items.len > 0) {
-                value = remaining.orderedRemove(0);
+            } else if (remaining.len > 0) {
+                value = remaining.*[0];
+                remaining.* = remaining.*[1..];
             } else return self.doFailWith(.value_required, f.name, error.ValueRequired);
         }
         try applyValue(self, f, value);
         try self.markAsParsed(f);
     }
 
-    fn parseSingleShortArg(self: *FlagSet, shorthands: *[]const u8, remaining: *std.ArrayListUnmanaged([]const u8)) !void {
+    fn parseSingleShortArg(self: *FlagSet, shorthands: *[]const u8, remaining: *[]const []const u8) !void {
         const c = shorthands.*[0];
         const flag = self.shorthandLookup(c);
         if (flag == null) {
@@ -596,8 +600,9 @@ pub const FlagSet = struct {
         } else if (shorthands.len > 1) {
             value = shorthands.*[1..];
             shorthands.* = "";
-        } else if (remaining.items.len > 0) {
-            value = remaining.orderedRemove(0);
+        } else if (remaining.len > 0) {
+            value = remaining.*[0];
+            remaining.* = remaining.*[1..];
             shorthands.* = "";
         } else return self.doFailWith(.value_required, f.name, error.ValueRequired);
 
@@ -605,19 +610,21 @@ pub const FlagSet = struct {
         try self.markAsParsed(f);
     }
 
-    fn parseShortArg(self: *FlagSet, s: []const u8, remaining: *std.ArrayListUnmanaged([]const u8)) !void {
+    fn parseShortArg(self: *FlagSet, s: []const u8, remaining: *[]const []const u8) !void {
         var sh: []const u8 = s[1..];
         while (sh.len > 0) try self.parseSingleShortArg(&sh, remaining);
     }
 
     fn parseArgLoop(self: *FlagSet, remaining: *std.ArrayListUnmanaged([]const u8)) !void {
         const gpa = self.gpa;
-        while (remaining.items.len > 0) {
-            const s = remaining.orderedRemove(0);
+        var i: usize = 0;
+        while (i < remaining.items.len) {
+            const s = remaining.items[i];
+            i += 1;
             if (s.len == 0 or s[0] != '-' or s.len == 1) {
                 if (!self.interspersed) {
                     try self.args.append(gpa, s);
-                    try self.args.appendSlice(gpa, remaining.items);
+                    try self.args.appendSlice(gpa, remaining.items[i..]);
                     remaining.clearAndFree(gpa);
                     return;
                 }
@@ -627,13 +634,19 @@ pub const FlagSet = struct {
             if (s[1] == '-') {
                 if (s.len == 2) {
                     self.args_len_at_dash = @intCast(self.args.items.len);
-                    try self.args.appendSlice(gpa, remaining.items);
+                    try self.args.appendSlice(gpa, remaining.items[i..]);
                     remaining.clearAndFree(gpa);
                     break;
                 }
-                try self.parseLongArg(s, remaining);
+                var rest: []const []const u8 = remaining.items[i..];
+                try self.parseLongArg(s, &rest);
+                const consumed = (remaining.items.len - i) - rest.len;
+                i += consumed;
             } else {
-                try self.parseShortArg(s, remaining);
+                var rest: []const []const u8 = remaining.items[i..];
+                try self.parseShortArg(s, &rest);
+                const consumed = (remaining.items.len - i) - rest.len;
+                i += consumed;
             }
         }
     }
@@ -692,12 +705,58 @@ fn formatFlagLine(
         try writeFn(ctx, f.def_value);
     }
     if (f.usage.len > 0) {
-        try writeFn(ctx, "\n    \t");
-        try writeFn(ctx, f.usage);
+        try writeFn(ctx, "\n");
+        if (cols > 0) {
+            try wrapUsageText(f.usage, cols, 8, writeFn, ctx);
+        } else {
+            try writeFn(ctx, "        ");
+            try writeFn(ctx, f.usage);
+        }
     }
     if (f.deprecated.len > 0) try writeFn(ctx, " (deprecated)");
     try writeFn(ctx, "\n");
-    _ = cols; // TODO: implement line wrapping at cols boundary
+}
+
+/// Word-wrap usage text at `cols` boundary with `indent` spaces on continuation lines.
+fn wrapUsageText(
+    usage: []const u8,
+    cols: usize,
+    indent: usize,
+    writeFn: anytype,
+    ctx: anytype,
+) !void {
+    var line_len: usize = 0;
+    var remaining = usage;
+
+    // First line gets indent
+    try writeFn(ctx, "        ");
+    line_len = 8;
+
+    while (remaining.len > 0) {
+        // Skip leading whitespace
+        while (remaining.len > 0 and (remaining[0] == ' ' or remaining[0] == '\t')) {
+            remaining = remaining[1..];
+        }
+        if (remaining.len == 0) break;
+
+        // Find next word boundary
+        const word_end = std.mem.indexOfAny(u8, remaining, " \t\n") orelse remaining.len;
+        const word = remaining[0..word_end];
+
+        if (line_len > 0 and line_len + word.len > cols) {
+            try writeFn(ctx, "\n");
+            var i: usize = 0;
+            while (i < indent) : (i += 1) try writeFn(ctx, " ");
+            line_len = indent;
+        } else if (line_len > indent) {
+            try writeFn(ctx, " ");
+            line_len += 1;
+        }
+
+        try writeFn(ctx, word);
+        line_len += word.len;
+        remaining = remaining[word_end..];
+    }
 }
 
 /// Shared helper: format a single flag line directly to a writer (for printDefaults / defaultUsage)
@@ -710,10 +769,55 @@ fn formatFlagLineWriter(f: *const Flag, cols: usize, w: *std.Io.Writer) !void {
     const hasDefault = !std.mem.eql(u8, f.def_value, "false") and !std.mem.eql(u8, f.def_value, "");
     const needsDefault = !std.mem.eql(u8, f.no_opt_def_val, "true");
     if (hasDefault and needsDefault) try w.print("={s}", .{f.def_value});
-    if (f.usage.len > 0) try w.print("\n    \t{s}", .{f.usage});
+    if (f.usage.len > 0) {
+        try w.print("\n", .{});
+        if (cols > 0) {
+            try wrapUsageTextWriter(f.usage, cols, 8, w);
+        } else {
+            try w.print("        {s}", .{f.usage});
+        }
+    }
     if (f.deprecated.len > 0) try w.print(" (deprecated: {s})", .{f.deprecated});
     try w.print("\n", .{});
-    _ = cols;
+}
+
+/// Word-wrap usage text to a std.Io.Writer at `cols` boundary.
+fn wrapUsageTextWriter(
+    usage: []const u8,
+    cols: usize,
+    indent: usize,
+    w: *std.Io.Writer,
+) !void {
+    var line_len: usize = 0;
+    var remaining = usage;
+
+    // First line gets indent
+    try w.print("        ", .{});
+    line_len = 8;
+
+    while (remaining.len > 0) {
+        while (remaining.len > 0 and (remaining[0] == ' ' or remaining[0] == '\t')) {
+            remaining = remaining[1..];
+        }
+        if (remaining.len == 0) break;
+
+        const word_end = std.mem.indexOfAny(u8, remaining, " \t\n") orelse remaining.len;
+        const word = remaining[0..word_end];
+
+        if (line_len > 0 and line_len + word.len > cols) {
+            try w.print("\n", .{});
+            var i: usize = 0;
+            while (i < indent) : (i += 1) try w.print(" ", .{});
+            line_len = indent;
+        } else if (line_len > indent) {
+            try w.print(" ", .{});
+            line_len += 1;
+        }
+
+        try w.print("{s}", .{word});
+        line_len += word.len;
+        remaining = remaining[word_end..];
+    }
 }
 
 fn defaultUsage(fs: *FlagSet) void {

@@ -53,9 +53,13 @@ fn stringStrFn(ptr: *anyopaque, gpa: std.mem.Allocator) anyerror![]const u8 {
     return gpa.dupe(u8, state.value.*);
 }
 
+/// DEPRECATED: Use `stringStateValue` instead for safe memory management.
+///
+/// This legacy form stores the pointer `p` directly without copying.
+/// On `set()`, it stores the caller's slice pointer without `gpa.dupe()`.
+/// The caller MUST ensure the slice outlives the FlagSet — otherwise
+/// dangling pointer. `deinit()` is a no-op (library doesn't own the memory).
 pub fn stringValue(val: []const u8, p: *[]const u8) Value {
-    // NOTE: caller should use stringStateValue for proper allocator tracking.
-    // This legacy form stores the pointer directly (no copy on set).
     p.* = val;
     return .{ .ptr = @ptrCast(@alignCast(p)), .vtable = &stringVtableLegacy };
 }

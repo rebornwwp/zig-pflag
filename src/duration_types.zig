@@ -57,7 +57,7 @@ pub fn parseDuration(s: []const u8) !i64 {
         'm' => val * std.time.ns_per_min,
         'h' => val * std.time.ns_per_hour,
         'd' => val * std.time.ns_per_day,
-        else => error.InvalidDuration,
+        else => error.UnknownDurationUnit,
     };
 }
 
@@ -113,4 +113,15 @@ test "DurationVar invalid format returns error" {
     var timeout: i64 = 0;
     try fs.durationVar(&timeout, "timeout", 0, "");
     try std.testing.expectError(error.InvalidCharacter, fs.parse(&.{"--timeout=invalid"}));
+}
+
+test "DurationVar unknown unit returns error" {
+    // Regression: previously returned InvalidDuration for unknown units.
+    // Now returns UnknownDurationUnit for clarity.
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    fs.error_handling = .continue_on_error;
+    var timeout: i64 = 0;
+    try fs.durationVar(&timeout, "timeout", 0, "");
+    try std.testing.expectError(error.UnknownDurationUnit, fs.parse(&.{"--timeout=5x"}));
 }

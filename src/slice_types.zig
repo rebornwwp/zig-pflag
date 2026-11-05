@@ -143,13 +143,17 @@ const stringSliceVtable = Value.VTable{
             }
             // Use CSV parsing for comma-separated values
             const parsed = try readAsCSV(gpa, v);
-            // Transfer ownership: parsed items are now owned by slice
+            // Transfer ownership: parsed items are now owned by slice.
+            // Transfer one-by-one so on OOM we only free un-transferred items
+            // (avoids double-free between this loop and the errdefer above).
+            var transferred: usize = 0;
+            errdefer {
+                for (parsed[transferred..]) |s| gpa.free(s);
+                gpa.free(parsed);
+            }
             for (parsed) |item| {
-                slice.append(gpa, item) catch |err| {
-                    // Free remaining items on error
-                    for (parsed) |s| gpa.free(s);
-                    return err;
-                };
+                try slice.append(gpa, item);
+                transferred += 1;
             }
             // Free the parsed array container (but not the strings, they're now in slice)
             gpa.free(parsed);
@@ -264,9 +268,9 @@ fn intSliceVtable(comptime T: type) Value.VTable {
                 var buf: std.ArrayListUnmanaged(u8) = .empty;
                 for (slice.items, 0..) |v, i| {
                     if (i > 0) try buf.appendSlice(gpa, ", ");
-                    var tmp: [32]u8 = undefined;
-                    const s = std.fmt.bufPrint(&tmp, "{d}", .{v}) catch unreachable;
-                    try buf.appendSlice(gpa, s);
+                    const formatted = try gpa.print("{d}", .{v});
+                    defer gpa.free(formatted);
+                    try buf.appendSlice(gpa, formatted);
                 }
                 return try buf.toOwnedSlice(gpa);
             }
@@ -325,9 +329,9 @@ fn uintSliceVtable(comptime T: type) Value.VTable {
                 var buf: std.ArrayListUnmanaged(u8) = .empty;
                 for (slice.items, 0..) |v, i| {
                     if (i > 0) try buf.appendSlice(gpa, ", ");
-                    var tmp: [32]u8 = undefined;
-                    const s = std.fmt.bufPrint(&tmp, "{d}", .{v}) catch unreachable;
-                    try buf.appendSlice(gpa, s);
+                    const formatted = try gpa.print("{d}", .{v});
+                    defer gpa.free(formatted);
+                    try buf.appendSlice(gpa, formatted);
                 }
                 return try buf.toOwnedSlice(gpa);
             }
@@ -456,9 +460,9 @@ fn floatSliceVtable(comptime T: type) Value.VTable {
                 var buf: std.ArrayListUnmanaged(u8) = .empty;
                 for (slice.items, 0..) |v, i| {
                     if (i > 0) try buf.appendSlice(gpa, ", ");
-                    var tmp: [32]u8 = undefined;
-                    const s = std.fmt.bufPrint(&tmp, "{d}", .{v}) catch unreachable;
-                    try buf.appendSlice(gpa, s);
+                    const formatted = try gpa.print("{d}", .{v});
+                    defer gpa.free(formatted);
+                    try buf.appendSlice(gpa, formatted);
                 }
                 return try buf.toOwnedSlice(gpa);
             }
@@ -928,6 +932,27 @@ test "FloatSlice WithDefault - parses value overriding defaults" {
     try std.testing.expectEqual(@as(usize, 2), slice.items.len);
     try std.testing.expectApproxEqRel(@as(f64, 3.14), slice.items[0], 0.001);
     try std.testing.expectApproxEqRel(@as(f64, 2.71), slice.items[1], 0.001);
+}
+
+test "FloatSlice string() output handles large values" {
+    // Regression: previously used bufPrint with 32-byte buffer + catch unreachable.
+    // f64 values like 1.7976931348623157e+308 exceed 32 chars in decimal form.
+    var slice: std.ArrayListUnmanaged(f64) = .empty;
+    var state = pflag.SliceState(f64){ .value = &slice, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.floatSliceVar(f64, &state, "vals", &.{}, "");
+    try fs.parse(&.{ "--vals=1.5", "--vals=1.7976931348623157e+308", "--vals=-0.0000001" });
+    try std.testing.expectEqual(@as(usize, 3), slice.items.len);
+
+    // Verify string() output doesn't crash (the old code would panic with catch unreachable)
+    const flag = fs.lookup("vals").?;
+    const str = try flag.value.string(std.testing.allocator);
+    defer std.testing.allocator.free(str);
+    // Just verify it contains the values in some form
+    try std.testing.expect(std.mem.indexOf(u8, str, "1.5") != null);
+    try std.testing.expect(str.len > 10); // large number produces long string
+    try std.testing.expect(std.mem.indexOf(u8, str, "-0.0000001") != null);
 }
 
 test "UintSlice Empty - parses no args" {

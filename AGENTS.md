@@ -9,7 +9,7 @@ zig-pflag:Go [spf13/pflag v1.0.9](https://github.com/spf13/pflag) 的 Zig 移植
 ## 命令
 
 ```bash
-zig build test                              # 跑全部 163 个测试(唯一测试入口)
+zig build test                              # 跑全部 189 个测试(唯一测试入口)
 zig build test --summary all                # 逐条列出测试名
 zig build build-examples                    # 编译 15 个示例(demo 由 zig build 单独编译)
 zig build                                   # 编译库 + demo
@@ -26,7 +26,7 @@ zig fmt --check src/ examples/ build.zig    # CI 的格式检查(范围不含根
 zig test --dep pflag -Mroot=src/pflag.zig -Mpflag=src/pflag.zig
 ```
 
-这会输出 `All 163 tests passed.` 显示测试总数。
+这会输出 `All 189 tests passed.` 显示测试总数。
 
 改动后必须至少跑 `zig build test` + `zig build build-examples`(CI 检查:fmt → test → build-examples → build)。
 
@@ -113,4 +113,4 @@ test "TypeName" {
 
 ## 上游差异
 
-README 的 "Port Status" 表记录了与 Go pflag 的差异:26 种类型移植了 16 种。未移植:ip/ipMask/ipNet/ipSlice/ipNetSlice、bytes、func、text、time、durationSlice。`pflag.zig` 里还有两处 TODO:`stringToIntVar`/`stringToStringVar` 的默认值预填充(`pflag.zig` 的 `stringToIntVarP`/`stringToStringVarP`),以及 `flagUsagesWrapped` 的按列宽换行(`_ = cols` 处)。改动时不要声称这些已实现。
+README 的 "Port Status" 表记录了与 Go pflag 的差异:26 种类型移植了 16 种。未移植:ip/ipMask/ipNet/ipSlice/ipNetSlice、bytes、func、text、time、durationSlice。`pflag.zig` 里还有一处 TODO:`stringToIntVar`/`stringToStringVar` 的默认值预填充(`pflag.zig` 的 `stringToIntVarP`/`stringToStringVarP`)。改动时不要声称这些已实现。
