@@ -125,3 +125,31 @@ test "DurationVar unknown unit returns error" {
     try fs.durationVar(&timeout, "timeout", 0, "");
     try std.testing.expectError(error.UnknownDurationUnit, fs.parse(&.{"--timeout=5x"}));
 }
+
+test "formatDuration roundtrips with parseDuration" {
+    // Verify formatDuration produces strings that parseDuration can parse back
+    const TestCase = struct {
+        ns: i64,
+        expected: []const u8,
+    };
+
+    const testCases = [_]TestCase{
+        .{ .ns = std.time.ns_per_day, .expected = "1d" },
+        .{ .ns = 2 * std.time.ns_per_hour, .expected = "2h" },
+        .{ .ns = 30 * std.time.ns_per_min, .expected = "30m" },
+        .{ .ns = 45 * std.time.ns_per_s, .expected = "45s" },
+        .{ .ns = 500 * std.time.ns_per_ms, .expected = "500ms" },
+        .{ .ns = 100 * std.time.ns_per_us, .expected = "100us" },
+        .{ .ns = 250, .expected = "250ns" },
+    };
+
+    for (testCases) |tc| {
+        const formatted = try formatDuration(tc.ns, std.testing.allocator);
+        defer std.testing.allocator.free(formatted);
+        try std.testing.expectEqualStrings(tc.expected, formatted);
+
+        // Roundtrip: parse the formatted string back
+        const parsed = try parseDuration(formatted);
+        try std.testing.expectEqual(tc.ns, parsed);
+    }
+}

@@ -699,6 +699,23 @@ test "writeAsCSV - basic output" {
     gpa.free(escaped);
 }
 
+test "StringSlice string() output" {
+    // Verify string() works correctly for string slice values (uses writeAsCSV)
+    var slice: std.ArrayListUnmanaged([]const u8) = .empty;
+    var state = pflag.StringSliceState{ .value = &slice, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.stringSliceVar(&state, "ss", &.{}, "");
+    try fs.parse(&.{"--ss=hello,world"});
+    try std.testing.expectEqual(@as(usize, 2), slice.items.len);
+
+    const flag = fs.lookup("ss").?;
+    const str = try flag.value.string(std.testing.allocator);
+    defer std.testing.allocator.free(str);
+    try std.testing.expect(std.mem.indexOf(u8, str, "hello") != null);
+    try std.testing.expect(std.mem.indexOf(u8, str, "world") != null);
+}
+
 test "IntSlice Empty - parses no args" {
     // Matches Go TestEmptyIS
     var slice: std.ArrayListUnmanaged(i32) = .empty;
@@ -887,6 +904,24 @@ test "BoolSlice BadQuoting - handles quotes and spaces like Go" {
             try std.testing.expectEqual(exp, slice.items[i]);
         }
     }
+}
+
+test "BoolSlice string() output" {
+    // Verify string() works correctly for bool slice values
+    var slice: std.ArrayListUnmanaged(bool) = .empty;
+    var state = pflag.SliceState(bool){ .value = &slice, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.boolSliceVar(&state, "flags", &.{}, "");
+    try fs.parse(&.{"--flags=true,false,1"});
+    try std.testing.expectEqual(@as(usize, 3), slice.items.len);
+
+    const flag = fs.lookup("flags").?;
+    const str = try flag.value.string(std.testing.allocator);
+    defer std.testing.allocator.free(str);
+    // Output format: "true, false, true"
+    try std.testing.expect(std.mem.indexOf(u8, str, "true") != null);
+    try std.testing.expect(std.mem.indexOf(u8, str, "false") != null);
 }
 
 test "FloatSlice Empty - parses no args" {

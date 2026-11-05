@@ -380,6 +380,24 @@ test "StringToString NilDefault - empty map default works like Go nil" {
     try std.testing.expectEqualStrings("2", map.get("b").?);
 }
 
+test "StringToString string() output" {
+    // Verify string() works correctly for string-to-string map values
+    var map: std.StringHashMapUnmanaged([]const u8) = .empty;
+    var state = pflag.StringToStringState{ .value = &map, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.stringToStringVar(&state, "labels", "", "");
+    try fs.parse(&.{"--labels=env=prod,region=us"});
+    try std.testing.expectEqual(@as(u32, 2), map.count());
+
+    const flag = fs.lookup("labels").?;
+    const str = try flag.value.string(std.testing.allocator);
+    defer std.testing.allocator.free(str);
+    // Output format: "key=val, key=val" — order may vary with hashmap
+    try std.testing.expect(std.mem.indexOf(u8, str, "env=prod") != null);
+    try std.testing.expect(std.mem.indexOf(u8, str, "region=us") != null);
+}
+
 test "StringToInt NilDefault - empty map default works like Go nil" {
     // Same as StringToString NilDefault - empty map replaces nil
     var map: std.StringHashMapUnmanaged(i32) = .empty;
