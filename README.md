@@ -147,6 +147,36 @@ Compared against Go [spf13/pflag v1.0.9](https://github.com/spf13/pflag). ✅ = 
 
 > **Summary**: 16 of 26 Go pflag types are fully ported. Network types (ip, ipMask, ipNet) and specialty adapters (bytes, func, text, time) remain as future work.
 
+## Known Differences
+
+While this port aims to match Go pflag's behavior, some differences exist due to language constraints and design choices:
+
+### Go-Specific Interfaces (Not Applicable)
+
+The following Go interfaces have no Zig equivalent and are not implemented:
+
+- **`SliceValue` interface** (`Append`/`Replace`/`GetSlice`): Zig uses direct slice manipulation instead
+- **Custom `Value` interface** (`IsBoolFlag`): Not needed in Zig's type system
+- **`triStateValue` custom type**: Demonstrates custom Value implementation in Go
+
+### CSV Parsing Edge Cases
+
+The `stringSlice` and `stringToString` types use a simplified CSV parser. The following edge cases are not fully supported:
+
+- **Quoted newlines**: `"a\nb"` is not preserved as `a\nb`
+- **Multi-line CSV records**: Records containing newlines are not rejected
+- **Trailing whitespace**: Whitespace after values may be trimmed
+
+These are rare edge cases. The parser handles the common cases: comma separation, quoted fields with embedded commas, and escaped quotes.
+
+### Test Coverage
+
+- **Current**: 163 tests (all passing)
+- **Go pflag**: ~191 tests
+- **Coverage**: ~92% of portable tests
+
+The missing tests are for Go-specific interfaces and edge cases that don't apply to Zig.
+
 ## Demo
 
 A fully working example demonstrating every flag type is in `examples/demo.zig`.

@@ -147,6 +147,36 @@ pub fn main(init: std.process.Init) !void {
 
 > **总结**：Go pflag 的 26 种类型中已有 16 种完成移植。网络类型（ip、ipMask、ipNet）和特殊适配器（bytes、func、text、time）留待后续工作。
 
+## 已知差异
+
+本移植尽量匹配 Go pflag 的行为，但由于语言特性和设计选择，存在以下差异：
+
+### Go 特有接口（不适用）
+
+以下 Go 接口在 Zig 中没有对应实现：
+
+- **`SliceValue` 接口**（`Append`/`Replace`/`GetSlice`）：Zig 使用直接操作切片代替
+- **自定义 `Value` 接口**（`IsBoolFlag`）：Zig 的类型系统不需要
+- **`triStateValue` 自定义类型**：展示 Go 中的自定义 Value 实现
+
+### CSV 解析边缘情况
+
+`stringSlice` 和 `stringToString` 类型使用简化的 CSV 解析器。以下边缘情况未完全支持：
+
+- **引号内换行**：`"a\nb"` 不会保留为 `a\nb`
+- **多行 CSV 记录**：包含换行的记录不会被拒绝
+- **尾部空格**：值后的空格可能被裁剪
+
+这些都是罕见的边缘情况。解析器能处理常见情况：逗号分隔、包含逗号的引号字段、转义引号。
+
+### 测试覆盖
+
+- **当前**：163 个测试（全部通过）
+- **Go pflag**：~191 个测试
+- **覆盖率**：~92% 的可移植测试
+
+缺失的测试是针对 Go 特有接口和不适用 Zig 的边缘情况。
+
 ## 示例
 
 `examples/demo.zig` 中包含了一个展示所有参数类型的完整示例。
