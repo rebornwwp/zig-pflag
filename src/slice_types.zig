@@ -7,12 +7,17 @@ const Value = pflag.Value;
 
 // ─── Generic Slice State ───
 
-/// Wrapper struct to track allocator for slice values.
+/// Wrapper struct to track allocator and changed state for slice values.
 /// Used by int/uint/float/bool slice types.
+///
+/// changed flag: tracks whether set() has been called at least once.
+/// Before the first Set, the slice contains user-provided defaults.
+/// The first Set clears and replaces defaults; subsequent Sets append.
 pub fn SliceState(comptime T: type) type {
     return struct {
         value: *std.ArrayListUnmanaged(T),
         gpa: std.mem.Allocator,
+        changed: bool = false,
     };
 }
 
@@ -237,6 +242,11 @@ fn intSliceVtable(comptime T: type) Value.VTable {
         .set = struct {
             fn set(ptr: *anyopaque, v: []const u8) !void {
                 const state: *SliceState(T) = @ptrCast(@alignCast(ptr));
+                // First Set replaces defaults; subsequent Sets append (matches Go)
+                if (!state.changed) {
+                    state.value.clearRetainingCapacity();
+                    state.changed = true;
+                }
                 // Split by comma and parse each value
                 var it = std.mem.splitScalar(u8, v, ',');
                 while (it.next()) |part| {
@@ -293,6 +303,11 @@ fn uintSliceVtable(comptime T: type) Value.VTable {
         .set = struct {
             fn set(ptr: *anyopaque, v: []const u8) !void {
                 const state: *SliceState(T) = @ptrCast(@alignCast(ptr));
+                // First Set replaces defaults; subsequent Sets append (matches Go)
+                if (!state.changed) {
+                    state.value.clearRetainingCapacity();
+                    state.changed = true;
+                }
                 // Split by comma and parse each value
                 var it = std.mem.splitScalar(u8, v, ',');
                 while (it.next()) |part| {
@@ -371,6 +386,11 @@ const boolSliceVtable = Value.VTable{
             }
 
             // Parse boolean values into slice
+            // First Set replaces defaults; subsequent Sets append (matches Go)
+            if (!state.changed) {
+                state.value.clearRetainingCapacity();
+                state.changed = true;
+            }
             for (parsed) |bool_str| {
                 const trimmed = std.mem.trim(u8, bool_str, " \t");
                 const b = try bool_types.parseBool(trimmed);
@@ -414,6 +434,11 @@ fn floatSliceVtable(comptime T: type) Value.VTable {
         .set = struct {
             fn set(ptr: *anyopaque, v: []const u8) !void {
                 const state: *SliceState(T) = @ptrCast(@alignCast(ptr));
+                // First Set replaces defaults; subsequent Sets append (matches Go)
+                if (!state.changed) {
+                    state.value.clearRetainingCapacity();
+                    state.changed = true;
+                }
                 // Split by comma and parse each value
                 var it = std.mem.splitScalar(u8, v, ',');
                 while (it.next()) |part| {
@@ -464,6 +489,56 @@ pub fn floatSliceValue(comptime T: type, state: *SliceState(T)) Value {
 }
 
 // ── Tests ──
+
+test "StringSlice Empty - parses no args" {
+    // Matches Go TestEmptySS
+    var slice: std.ArrayListUnmanaged([]const u8) = .empty;
+    var state = pflag.StringSliceState{ .value = &slice, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.stringSliceVar(&state, "ss", &.{}, "");
+    try fs.parse(&.{});
+    try std.testing.expectEqual(@as(usize, 0), slice.items.len);
+}
+
+test "StringSlice Empty value - parses --ss=" {
+    // Matches Go TestEmptySSValue
+    var slice: std.ArrayListUnmanaged([]const u8) = .empty;
+    var state = pflag.StringSliceState{ .value = &slice, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.stringSliceVar(&state, "ss", &.{}, "");
+    try fs.parse(&.{"--ss="});
+    try std.testing.expectEqual(@as(usize, 0), slice.items.len);
+}
+
+test "StringSlice Default - preserves defaults" {
+    // Matches Go TestSSDefault
+    var slice: std.ArrayListUnmanaged([]const u8) = .empty;
+    var state = pflag.StringSliceState{ .value = &slice, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.stringSliceVar(&state, "ss", &.{ "default", "values" }, "");
+    try fs.parse(&.{});
+    try std.testing.expectEqual(@as(usize, 2), slice.items.len);
+    try std.testing.expectEqualStrings("default", slice.items[0]);
+    try std.testing.expectEqualStrings("values", slice.items[1]);
+}
+
+test "StringSlice WithDefault - parses value overriding defaults" {
+    // Matches Go TestSSWithDefault
+    var slice: std.ArrayListUnmanaged([]const u8) = .empty;
+    var state = pflag.StringSliceState{ .value = &slice, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.stringSliceVar(&state, "ss", &.{ "default", "values" }, "");
+    try fs.parse(&.{"--ss=one,two,4,3"});
+    try std.testing.expectEqual(@as(usize, 4), slice.items.len);
+    try std.testing.expectEqualStrings("one", slice.items[0]);
+    try std.testing.expectEqualStrings("two", slice.items[1]);
+    try std.testing.expectEqualStrings("4", slice.items[2]);
+    try std.testing.expectEqualStrings("3", slice.items[3]);
+}
 
 test "StringSlice" {
     const TestCase = struct {
@@ -620,6 +695,17 @@ test "writeAsCSV - basic output" {
     gpa.free(escaped);
 }
 
+test "IntSlice Empty - parses no args" {
+    // Matches Go TestEmptyIS
+    var slice: std.ArrayListUnmanaged(i32) = .empty;
+    var state = pflag.SliceState(i32){ .value = &slice, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.intSliceVar(i32, &state, "num", &.{}, "");
+    try fs.parse(&.{});
+    try std.testing.expectEqual(@as(usize, 0), slice.items.len);
+}
+
 test "IntSlice" {
     const TestCase = struct {
         input: []const []const u8,
@@ -672,6 +758,30 @@ test "IntSlice WithDefault - preserves defaults when not set" {
     try std.testing.expectEqual(@as(i32, 1), slice.items[1]);
 }
 
+test "IntSlice WithDefault - parses value overriding defaults" {
+    // Matches Go TestISWithDefault
+    var slice: std.ArrayListUnmanaged(i32) = .empty;
+    var state = pflag.SliceState(i32){ .value = &slice, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.intSliceVar(i32, &state, "num", &.{ 0, 1 }, "");
+    try fs.parse(&.{"--num=1,2"});
+    try std.testing.expectEqual(@as(usize, 2), slice.items.len);
+    try std.testing.expectEqual(@as(i32, 1), slice.items[0]);
+    try std.testing.expectEqual(@as(i32, 2), slice.items[1]);
+}
+
+test "BoolSlice Empty - parses no args" {
+    // Matches Go TestEmptyBS
+    var slice: std.ArrayListUnmanaged(bool) = .empty;
+    var state = pflag.SliceState(bool){ .value = &slice, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.boolSliceVar(&state, "flags", &.{}, "");
+    try fs.parse(&.{});
+    try std.testing.expectEqual(@as(usize, 0), slice.items.len);
+}
+
 test "BoolSlice" {
     var slice: std.ArrayListUnmanaged(bool) = .empty;
     var state = pflag.SliceState(bool){ .value = &slice, .gpa = std.testing.allocator };
@@ -711,6 +821,19 @@ test "BoolSlice WithDefault - preserves defaults when not set" {
     try std.testing.expect(slice.items[1]);
 }
 
+test "BoolSlice WithDefault - parses value overriding defaults" {
+    // Matches Go TestBSWithDefault
+    var slice: std.ArrayListUnmanaged(bool) = .empty;
+    var state = pflag.SliceState(bool){ .value = &slice, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.boolSliceVar(&state, "flags", &.{ false, true }, "");
+    try fs.parse(&.{"--flags=FALSE,1"});
+    try std.testing.expectEqual(@as(usize, 2), slice.items.len);
+    try std.testing.expect(!slice.items[0]);
+    try std.testing.expect(slice.items[1]);
+}
+
 test "BoolSlice BadQuoting - handles quotes and spaces like Go" {
     // Matches Go's TestBSBadQuoting
     const TestCase = struct {
@@ -742,6 +865,17 @@ test "BoolSlice BadQuoting - handles quotes and spaces like Go" {
             try std.testing.expectEqual(exp, slice.items[i]);
         }
     }
+}
+
+test "FloatSlice Empty - parses no args" {
+    // Matches Go TestEmptyF32S (f64 in Zig)
+    var slice: std.ArrayListUnmanaged(f64) = .empty;
+    var state = pflag.SliceState(f64){ .value = &slice, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.floatSliceVar(f64, &state, "vals", &.{}, "");
+    try fs.parse(&.{});
+    try std.testing.expectEqual(@as(usize, 0), slice.items.len);
 }
 
 test "FloatSlice" {
@@ -783,6 +917,30 @@ test "FloatSlice WithDefault - preserves defaults when not set" {
     try std.testing.expectApproxEqRel(@as(f64, 2.0), slice.items[1], 0.001);
 }
 
+test "FloatSlice WithDefault - parses value overriding defaults" {
+    // Matches Go TestF32SWithDefault
+    var slice: std.ArrayListUnmanaged(f64) = .empty;
+    var state = pflag.SliceState(f64){ .value = &slice, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.floatSliceVar(f64, &state, "vals", &.{ 1.0, 2.0 }, "");
+    try fs.parse(&.{"--vals=3.14,2.71"});
+    try std.testing.expectEqual(@as(usize, 2), slice.items.len);
+    try std.testing.expectApproxEqRel(@as(f64, 3.14), slice.items[0], 0.001);
+    try std.testing.expectApproxEqRel(@as(f64, 2.71), slice.items[1], 0.001);
+}
+
+test "UintSlice Empty - parses no args" {
+    // Matches Go TestEmptyUIS
+    var slice: std.ArrayListUnmanaged(u32) = .empty;
+    var state = pflag.SliceState(u32){ .value = &slice, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.uintSliceVar(u32, &state, "nums", &.{}, "");
+    try fs.parse(&.{});
+    try std.testing.expectEqual(@as(usize, 0), slice.items.len);
+}
+
 test "UintSlice" {
     var slice: std.ArrayListUnmanaged(u32) = .empty;
     var state = pflag.SliceState(u32){ .value = &slice, .gpa = std.testing.allocator };
@@ -822,6 +980,19 @@ test "UintSlice WithDefault - preserves defaults when not set" {
     try std.testing.expectEqual(@as(u32, 1), slice.items[1]);
 }
 
+test "UintSlice WithDefault - parses value overriding defaults" {
+    // Matches Go TestUISWithDefault
+    var slice: std.ArrayListUnmanaged(u32) = .empty;
+    var state = pflag.SliceState(u32){ .value = &slice, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.uintSliceVar(u32, &state, "nums", &.{ 0, 1 }, "");
+    try fs.parse(&.{"--nums=1,2"});
+    try std.testing.expectEqual(@as(usize, 2), slice.items.len);
+    try std.testing.expectEqual(@as(u32, 1), slice.items[0]);
+    try std.testing.expectEqual(@as(u32, 2), slice.items[1]);
+}
+
 test "UintSlice Hex - parses 0x prefixed values" {
     var slice: std.ArrayListUnmanaged(u32) = .empty;
     var state = pflag.SliceState(u32){ .value = &slice, .gpa = std.testing.allocator };
@@ -833,6 +1004,30 @@ test "UintSlice Hex - parses 0x prefixed values" {
     try std.testing.expectEqual(@as(u32, 1), slice.items[0]);
     try std.testing.expectEqual(@as(u32, 2), slice.items[1]);
     try std.testing.expectEqual(@as(u32, 16), slice.items[2]);
+}
+
+test "StringArray Empty - parses no args" {
+    // Matches Go TestEmptySA
+    var slice: std.ArrayListUnmanaged([]const u8) = .empty;
+    var state = pflag.StringArrayState{ .value = &slice, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.stringArrayVar(&state, "sa", &.{}, "");
+    try fs.parse(&.{});
+    try std.testing.expectEqual(@as(usize, 0), slice.items.len);
+}
+
+test "StringArray Default - preserves defaults when not set" {
+    // Matches Go TestSADefault
+    var slice: std.ArrayListUnmanaged([]const u8) = .empty;
+    var state = pflag.StringArrayState{ .value = &slice, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.stringArrayVar(&state, "sa", &.{ "default", "values" }, "");
+    try fs.parse(&.{});
+    try std.testing.expectEqual(@as(usize, 2), slice.items.len);
+    try std.testing.expectEqualStrings("default", slice.items[0]);
+    try std.testing.expectEqualStrings("values", slice.items[1]);
 }
 
 test "StringArray" {

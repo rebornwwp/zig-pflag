@@ -268,6 +268,32 @@ test "StringToInt rejects non-key=value" {
     try std.testing.expectError(error.ExpectedKeyValue, fs.parse(&.{"--headers=badval"}));
 }
 
+test "StringToString Empty - parses no args" {
+    // Matches Go TestEmptyS2S
+    var map: std.StringHashMapUnmanaged([]const u8) = .empty;
+    var state = pflag.StringToStringState{ .value = &map, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.stringToStringVar(&state, "s2s", "", "");
+    try fs.parse(&.{});
+    try std.testing.expectEqual(@as(u32, 0), map.count());
+}
+
+test "StringToString WithDefault - parses value overriding defaults" {
+    // Matches Go TestS2SWithDefault
+    var map: std.StringHashMapUnmanaged([]const u8) = .empty;
+    var state = pflag.StringToStringState{ .value = &map, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try map.put(std.testing.allocator, "a", "1");
+    try map.put(std.testing.allocator, "b", "2");
+    try fs.stringToStringVar(&state, "s2s", "", "");
+    try fs.parse(&.{"--s2s=c=3,d=4"});
+    try std.testing.expectEqual(@as(u32, 2), map.count());
+    try std.testing.expectEqualStrings("3", map.get("c").?);
+    try std.testing.expectEqualStrings("4", map.get("d").?);
+}
+
 test "StringToString" {
     const TestCase = struct {
         input: []const []const u8,
