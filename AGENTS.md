@@ -9,7 +9,7 @@ zig-pflag:Go [spf13/pflag v1.0.9](https://github.com/spf13/pflag) 的 Zig 移植
 ## 命令
 
 ```bash
-zig build test                              # 跑全部 201 个测试(唯一测试入口)
+zig build test                              # 跑全部 205 个测试(唯一测试入口)
 zig build test --summary all                # 逐条列出测试名
 zig build build-examples                    # 编译 15 个示例(demo 由 zig build 单独编译)
 zig build                                   # 编译库 + demo
@@ -26,7 +26,7 @@ zig fmt --check src/ examples/ build.zig    # CI 的格式检查(范围不含根
 zig test --dep pflag -Mroot=src/pflag.zig -Mpflag=src/pflag.zig
 ```
 
-这会输出 `All 201 tests passed.` 显示测试总数。
+这会输出 `All 205 tests passed.` 显示测试总数。
 
 改动后必须至少跑 `zig build test` + `zig build build-examples`(CI 检查:fmt → test → build-examples → build)。
 
@@ -93,8 +93,15 @@ test "TypeName" {
 
 - slice/map 类型的状态由外部持有的 `*XxxState` 拥有,字符串通过 `gpa.dupe` 复制;`deinit` 里**只在用户真的设过值时才 free 逐项内存**(slice/map 看 `state.changed`,标量 `StringState` 看 `state.allocated`),因为默认值通常是库外持有的借用切片/字面量。
 - `FlagSet.deinit()` 会遍历 `ordered_formal`,逐个调 `flag.deinit(gpa)`(即 vtable 的 `deinit`)、free `def_value`、destroy flag。新加的类型必须正确实现 vtable deinit,否则泄漏。
-- `stringArrayVar` 的语义:**第一次** `Set` 替换默认值,之后追加。`stringSliceVar` 则是纯追加。别搞混。
+- `stringArrayVar` 和 `stringSliceVar` 的**替换语义相同**:首次 `Set` 清空默认值,之后追加(都靠 `state.changed` 判定)。别搞混。
+- 两者真正的区别在**值的拆分方式**:`stringSliceVar` 走 `readAsCSV`,引号内的逗号会被当成一个字段(`"a,b"` → 1 个元素),`string()` 输出也用 CSV 转义;`stringArrayVar` 把整个值原样当**一个**元素存,`string()` 输出只用逗号裸拼接。
 - **`stringVar`/`stringVarP` 是 legacy 语义:Set 不复制,直接存调用方传入的指针**(`string_types.zig` 里的 `stringValue`/`stringVtableLegacy`)。传入的切片必须比 FlagSet 活得久。需要库来管理内存时用 `stringStateVar`/`stringStateVarP`(内部 `gpa.dupe`,`deinit` 时 free)。新增代码优先用后者。
+- `set()` 里凡是「先 `gpa.dupe`/分配,再交给容器持有」的写法,必须保证**所有权转移成功后才不再 free,转移失败则一定要 free**。两种已踩过的坑:
+  - `try slice.append(gpa, try gpa.dupe(u8, v))` —— `append` OOM 时 dupe 出来的字符串**永远不会被释放**(所有权没转移成功,也没人 free)。正确写法是先 dupe 到局部变量 + `errdefer gpa.free(...)`,再 append。
+  - 一个值有多个 dupe 结果时,**每一个都要有自己的 errdefer**。`strToStrVtable.set` 曾经只给 `key` 写了 `errdefer`,`val` 漏了,于是 `map.put` OOM 时泄漏 `val`。
+- 循环里逐个转移所有权的场景,用「已转移计数器」而不是「出错时 free 整批」,否则内层 catch 和外层 errdefer 会 **double free**(见 `stringSliceSetFn` 的 `transferred`)。
+- **错误路径必须用 `std.testing.checkAllAllocationFailures` 测**,普通测试永远走不到 errdefer 分支。用法见 `slice_types.zig`/`map_types.zig` 底部:`fn xxxImpl(gpa: std.mem.Allocator) !void` + `try std.testing.checkAllAllocationFailures(std.testing.allocator, xxxImpl, .{})`。
+  - 里面**必须**设 `fs.error_handling = .continue_on_error`,否则 OOM 会走 `.exit_on_error` → `std.process.exit(2)`,直接把测试进程杀掉(表现为「跑一半没输出、exit 0/2」,很难排查)。
 - 测试用 `std.testing.allocator`,泄漏会让测试直接失败。
 
 ## Zig 0.17 相关

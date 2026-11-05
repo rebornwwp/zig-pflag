@@ -203,7 +203,11 @@ const stringArrayVtable = Value.VTable{
             if (!state.changed) {
                 slice.clearRetainingCapacity();
             }
-            try slice.append(gpa, try gpa.dupe(u8, v));
+            // Dupe first, then append. If append fails we must free `duped`,
+            // otherwise it leaks (ownership was never transferred to the slice).
+            const duped = try gpa.dupe(u8, v);
+            errdefer gpa.free(duped);
+            try slice.append(gpa, duped);
             state.changed = true;
         }
     }.set,
@@ -1272,4 +1276,48 @@ test "StringToInt WithDefault - parses value overriding defaults" {
     try std.testing.expectEqual(@as(u32, 2), map.count());
     try std.testing.expectEqual(@as(i32, 3), map.get("a").?);
     try std.testing.expectEqual(@as(i32, 4), map.get("b").?);
+}
+
+// ── Allocation-failure tests ──
+//
+// These use std.testing.checkAllAllocationFailures, which induces OOM at every
+// possible allocation site one at a time and asserts allocated_bytes ==
+// freed_bytes. This is the ONLY way to exercise the errdefer cleanup paths in
+// the set() implementations — a plain test never hits them.
+//
+// error_handling MUST be .continue_on_error: the default .exit_on_error would
+// call std.process.exit(2) on OOM and kill the test process.
+
+fn stringSliceSetImpl(gpa: std.mem.Allocator) !void {
+    var slice: std.ArrayListUnmanaged([]const u8) = .empty;
+    var state = pflag.StringSliceState{ .value = &slice, .gpa = gpa };
+    var fs = pflag.FlagSet.init(gpa, "test");
+    defer fs.deinit();
+    fs.error_handling = .continue_on_error;
+    try fs.stringSliceVar(&state, "ss", &.{}, "");
+    // Two Set calls: exercises both the "first Set replaces defaults" path and
+    // the "subsequent Set appends" path of the transferred-counter cleanup.
+    try fs.parse(&.{ "--ss=a,b,c", "--ss=d" });
+}
+
+test "StringSlice set leaks nothing under allocation failure" {
+    // Regression: the original code freed ALL of `parsed` in a catch while the
+    // outer errdefer also freed items already appended from `parsed` → double free.
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, stringSliceSetImpl, .{});
+}
+
+fn stringArraySetImpl(gpa: std.mem.Allocator) !void {
+    var slice: std.ArrayListUnmanaged([]const u8) = .empty;
+    var state = pflag.StringArrayState{ .value = &slice, .gpa = gpa };
+    var fs = pflag.FlagSet.init(gpa, "test");
+    defer fs.deinit();
+    fs.error_handling = .continue_on_error;
+    try fs.stringArrayVar(&state, "sa", &.{}, "");
+    try fs.parse(&.{ "--sa=one", "--sa=two" });
+}
+
+test "StringArray set leaks nothing under allocation failure" {
+    // Regression: `try slice.append(gpa, try gpa.dupe(u8, v))` leaked the duped
+    // string when append failed, because ownership never transferred.
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, stringArraySetImpl, .{});
 }

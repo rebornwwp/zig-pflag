@@ -146,6 +146,9 @@ const strToStrVtable = Value.VTable{
                 const key = try gpa.dupe(u8, trimmed[0..eq]);
                 errdefer gpa.free(key);
                 const val = try gpa.dupe(u8, trimmed[eq + 1 ..]);
+                // val needs its own errdefer: if map.put() below fails,
+                // ownership never transfers and val would leak.
+                errdefer gpa.free(val);
                 if (!state.changed) {
                     // First Set: defaults may have literal (non-owned) keys/values,
                     // so do NOT free them — just clear the backing storage.
@@ -409,4 +412,43 @@ test "StringToInt NilDefault - empty map default works like Go nil" {
     try std.testing.expectEqual(@as(u32, 2), map.count());
     try std.testing.expectEqual(@as(i32, 1), map.get("a").?);
     try std.testing.expectEqual(@as(i32, 2), map.get("b").?);
+}
+
+// ── Allocation-failure tests ──
+//
+// See the note in slice_types.zig. error_handling MUST be .continue_on_error,
+// otherwise OOM routes to std.process.exit(2) and kills the test process.
+
+fn strToStrSetImpl(gpa: std.mem.Allocator) !void {
+    var map: std.StringHashMapUnmanaged([]const u8) = .empty;
+    var state = pflag.StringToStringState{ .value = &map, .gpa = gpa };
+    var fs = pflag.FlagSet.init(gpa, "test");
+    defer fs.deinit();
+    fs.error_handling = .continue_on_error;
+    try fs.stringToStringVar(&state, "labels", "", "");
+    // Second Set reuses key "a" so the duplicate-key branch (manual key free +
+    // old value free + in-place value swap) is exercised too.
+    try fs.parse(&.{ "--labels=a=1,b=2", "--labels=a=3,c=4" });
+}
+
+test "StringToString set leaks nothing under allocation failure" {
+    // Regression: `key` had an errdefer but `val` did not, so a failed map.put
+    // leaked the duped value string.
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, strToStrSetImpl, .{});
+}
+
+fn strToIntSetImpl(gpa: std.mem.Allocator) !void {
+    var map: std.StringHashMapUnmanaged(i32) = .empty;
+    var state = pflag.StringToIntState(i32){ .value = &map, .gpa = gpa };
+    var fs = pflag.FlagSet.init(gpa, "test");
+    defer fs.deinit();
+    fs.error_handling = .continue_on_error;
+    try fs.stringToIntVar(i32, &state, "headers", 0, "");
+    try fs.parse(&.{ "--headers=a=1,b=2", "--headers=a=3,c=4" });
+}
+
+test "StringToInt set leaks nothing under allocation failure" {
+    // Validates the errdefer gpa.free(key) path, including the duplicate-key
+    // branch where the fresh duped key is freed and the value updated in place.
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, strToIntSetImpl, .{});
 }
