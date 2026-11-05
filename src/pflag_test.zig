@@ -1617,3 +1617,40 @@ test "FlagUsagesWrapped wraps long usage at column boundary" {
     try testing.expect(std.mem.containsAtLeast(u8, narrow, 1, "verbose"));
     try testing.expect(std.mem.containsAtLeast(u8, narrow, 1, "wrap"));
 }
+
+test "parseArgLoop handles consecutive value-consuming flags" {
+    // Regression: parseArgLoop was refactored from orderedRemove(0) to index-based.
+    // Verify that consecutive flags that each consume a value parse correctly.
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    var a: []const u8 = "";
+    var b: []const u8 = "";
+    var c: []const u8 = "";
+    try fs.stringVarP(&a, "alpha", "a", "", "");
+    try fs.stringVarP(&b, "beta", "b", "", "");
+    try fs.stringVarP(&c, "gamma", "g", "", "");
+
+    // Long flags with space-separated values
+    try fs.parse(&.{ "--alpha", "val1", "--beta", "val2", "--gamma", "val3" });
+    try testing.expectEqualStrings("val1", a);
+    try testing.expectEqualStrings("val2", b);
+    try testing.expectEqualStrings("val3", c);
+}
+
+test "parseArgLoop handles mixed long and short flags with values" {
+    // Verify index-based iteration handles mixed flag styles correctly
+    var fs = newTestFlagSet();
+    defer fs.deinit();
+    var name: []const u8 = "";
+    var count: i32 = 0;
+    var output: []const u8 = "";
+    try fs.stringVarP(&name, "name", "n", "", "");
+    try fs.intVar(i32, &count, "count", 0, "");
+    try fs.stringVarP(&output, "output", "o", "", "");
+
+    // Mix of long and short flags, each consuming a value
+    try fs.parse(&.{ "-n", "alice", "--count", "42", "-o", "result.txt" });
+    try testing.expectEqualStrings("alice", name);
+    try testing.expectEqual(@as(i32, 42), count);
+    try testing.expectEqualStrings("result.txt", output);
+}

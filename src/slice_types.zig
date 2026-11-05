@@ -775,6 +775,24 @@ test "IntSlice WithDefault - parses value overriding defaults" {
     try std.testing.expectEqual(@as(i32, 2), slice.items[1]);
 }
 
+test "IntSlice string() output" {
+    // Verify string() works correctly for int slice values
+    var slice: std.ArrayListUnmanaged(i32) = .empty;
+    var state = pflag.SliceState(i32){ .value = &slice, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.intSliceVar(i32, &state, "num", &.{}, "");
+    try fs.parse(&.{"--num=1,-42,100"});
+    try std.testing.expectEqual(@as(usize, 3), slice.items.len);
+
+    const flag = fs.lookup("num").?;
+    const str = try flag.value.string(std.testing.allocator);
+    defer std.testing.allocator.free(str);
+    try std.testing.expect(std.mem.indexOf(u8, str, "1") != null);
+    try std.testing.expect(std.mem.indexOf(u8, str, "-42") != null);
+    try std.testing.expect(std.mem.indexOf(u8, str, "100") != null);
+}
+
 test "BoolSlice Empty - parses no args" {
     // Matches Go TestEmptyBS
     var slice: std.ArrayListUnmanaged(bool) = .empty;
@@ -1029,6 +1047,24 @@ test "UintSlice Hex - parses 0x prefixed values" {
     try std.testing.expectEqual(@as(u32, 1), slice.items[0]);
     try std.testing.expectEqual(@as(u32, 2), slice.items[1]);
     try std.testing.expectEqual(@as(u32, 16), slice.items[2]);
+}
+
+test "UintSlice string() output" {
+    // Verify string() works correctly for uint slice values
+    var slice: std.ArrayListUnmanaged(u32) = .empty;
+    var state = pflag.SliceState(u32){ .value = &slice, .gpa = std.testing.allocator };
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    try fs.uintSliceVar(u32, &state, "nums", &.{}, "");
+    try fs.parse(&.{"--nums=10,42,8080"});
+    try std.testing.expectEqual(@as(usize, 3), slice.items.len);
+
+    const flag = fs.lookup("nums").?;
+    const str = try flag.value.string(std.testing.allocator);
+    defer std.testing.allocator.free(str);
+    try std.testing.expect(std.mem.indexOf(u8, str, "10") != null);
+    try std.testing.expect(std.mem.indexOf(u8, str, "42") != null);
+    try std.testing.expect(std.mem.indexOf(u8, str, "8080") != null);
 }
 
 test "StringArray Empty - parses no args" {
