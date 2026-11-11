@@ -415,6 +415,30 @@ zig build build-examples
 | `hasFlags()` / `hasAvailableFlags()` | Query flag state |
 | `lastError()` | Details of last parse error |
 
+## API Documentation
+
+```sh
+zig build docs
+open zig-out/docs/index.html     # macOS
+```
+
+The step emits the Zig compiler's `-femit-docs` bundle: a self-contained
+offline site (`index.html` + a wasm source viewer + every reachable Zig file,
+including this library and std) — no local server or network needed. Inside
+the browser you get full symbol search across the project, per-declaration
+pages, and source navigation; every public declaration carries `///` doc
+comments (registration semantics, ownership rules, Go divergences) as the
+content you are reading there.
+
+Notes:
+- `zig build docs` is opt-in and not part of the CI sequence (the bundle is
+  ~17 MB because it embeds std for cross-module browsing).
+- Regenerate after editing public doc comments; the output is a static
+  snapshot under `zig-out/docs`.
+- For a quick overview without a browser, the tables below remain the
+  reference: [Supported Flag Types](#supported-flag-types) and
+  [FlagSet API](#flagset-api).
+
 ## File Layout
 
 ```

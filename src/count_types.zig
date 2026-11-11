@@ -35,6 +35,7 @@ fn countStrFn(ptr: *anyopaque, gpa: std.mem.Allocator) anyerror![]const u8 {
     return gpa.print("{d}", .{p.*});
 }
 
+/// Wraps `*i32` as a Value that increments on "+1" sentinels (bare occurrences).
 pub fn countValue(val: i32, p: *i32) Value {
     p.* = val;
     return .{ .ptr = p, .vtable = &countVtable };

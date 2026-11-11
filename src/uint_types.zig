@@ -51,6 +51,7 @@ fn uintDeinitFn(comptime T: type) *const fn (*anyopaque, std.mem.Allocator) void
     }.di;
 }
 
+/// Binds `*T` (u8..u64) as a Value; negative inputs fail as Overflow (`-0` ok).
 pub fn uintValue(comptime T: type, val: T, p: *T) Value {
     p.* = val;
     const vt: *const Value.VTable = switch (T) {

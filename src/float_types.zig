@@ -37,6 +37,7 @@ fn floatStrFn(comptime T: type) *const fn (*anyopaque, std.mem.Allocator) anyerr
     }.str;
 }
 
+/// Binds `*T` (f32/f64) as a Value; overflow saturates to +/-inf silently.
 pub fn floatValue(comptime T: type, val: T, p: *T) Value {
     p.* = val;
     const vt: *const Value.VTable = switch (T) {

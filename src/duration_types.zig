@@ -71,6 +71,7 @@ pub fn formatDuration(ns: i64, gpa: std.mem.Allocator) ![]const u8 {
     return gpa.print("{d}ns", .{ns});
 }
 
+/// Wraps `*i64` of nanoseconds as a Value; accepts the `ns..d` unit grammar.
 pub fn durationValue(val: i64, p: *i64) Value {
     p.* = val;
     return .{ .ptr = p, .vtable = &durationVtable };

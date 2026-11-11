@@ -59,11 +59,14 @@ fn stringStrFn(ptr: *anyopaque, gpa: std.mem.Allocator) anyerror![]const u8 {
 /// On `set()`, it stores the caller's slice pointer without `gpa.dupe()`.
 /// The caller MUST ensure the slice outlives the FlagSet — otherwise
 /// dangling pointer. `deinit()` is a no-op (library doesn't own the memory).
+/// LEGACY raw-pointer string Value: set() stores the CALLER's slice without
+/// duplicating (it must outlive the FlagSet). Prefer `stringStateValue`.
 pub fn stringValue(val: []const u8, p: *[]const u8) Value {
     p.* = val;
     return .{ .ptr = @ptrCast(@alignCast(p)), .vtable = &stringVtableLegacy };
 }
 
+/// Library-managed string Value: every set() dupes via `state.gpa`, deinit frees.
 pub fn stringStateValue(state: *StringState) Value {
     return .{ .ptr = @ptrCast(@alignCast(state)), .vtable = &stringVtable };
 }

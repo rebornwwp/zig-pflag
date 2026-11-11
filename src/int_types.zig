@@ -51,6 +51,7 @@ fn intDeinitFn(comptime T: type) *const fn (*anyopaque, std.mem.Allocator) void 
     }.di;
 }
 
+/// Binds `*T` (i8..i64) as a Value with radix-0 integer parsing.
 pub fn intValue(comptime T: type, val: T, p: *T) Value {
     p.* = val;
     const vt: *const Value.VTable = switch (T) {

@@ -29,6 +29,7 @@ fn boolDeinitFn(ptr: *anyopaque, gpa: std.mem.Allocator) void {
     _ = gpa;
 }
 
+/// Wraps `*bool` as a Value (spelling table = `parseBool`); used by boolVar(P).
 pub fn boolValue(val: bool, p: *bool) Value {
     p.* = val;
     return .{ .ptr = p, .vtable = &boolVtable };

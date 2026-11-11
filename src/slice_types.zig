@@ -101,6 +101,7 @@ const stringSliceVtable = Value.VTable{
     }.di,
 };
 
+/// CSV-semantic string slice Value over `state` (first Set replaces defaults).
 pub fn stringSliceValue(state: *StringSliceState) Value {
     return .{ .ptr = @ptrCast(@alignCast(state)), .vtable = &stringSliceVtable };
 }
@@ -157,6 +158,7 @@ const stringArrayVtable = Value.VTable{
     }.di,
 };
 
+/// Array-semantic string slice Value: whole raw value = ONE element, no CSV.
 pub fn stringArrayValue(state: *StringSliceState) Value {
     return .{ .ptr = @ptrCast(@alignCast(state)), .vtable = &stringArrayVtable };
 }
@@ -236,6 +238,7 @@ fn intSliceVtable(comptime T: type) Value.VTable {
 const i32SliceVtable = intSliceVtable(i32);
 const i64SliceVtable = intSliceVtable(i64);
 
+/// Signed numeric slice Value via the shared makeNumSliceVtable (i8..i64).
 pub fn intSliceValue(comptime T: type, state: *SliceState(T)) Value {
     const vt: *const Value.VTable = switch (T) {
         i32 => &i32SliceVtable,
@@ -255,6 +258,7 @@ const u16SliceVtable = uintSliceVtable(u16);
 const u32SliceVtable = uintSliceVtable(u32);
 const u64SliceVtable = uintSliceVtable(u64);
 
+/// Unsigned numeric slice Value (u8..u64), same comma-split semantics.
 pub fn uintSliceValue(comptime T: type, state: *SliceState(T)) Value {
     const vt: *const Value.VTable = switch (T) {
         u8 => &u8SliceVtable,
@@ -328,6 +332,7 @@ const boolSliceVtable = Value.VTable{
     }.di,
 };
 
+/// Bool slice Value: quote-stripped CSV input, then parseBool per element.
 pub fn boolSliceValue(state: *SliceState(bool)) Value {
     return .{ .ptr = @ptrCast(@alignCast(state)), .vtable = &boolSliceVtable };
 }
@@ -340,6 +345,7 @@ fn floatSliceVtable(comptime T: type) Value.VTable {
 const f32SliceVtable = floatSliceVtable(f32);
 const f64SliceVtable = floatSliceVtable(f64);
 
+/// Float slice Value (f32/f64).
 pub fn floatSliceValue(comptime T: type, state: *SliceState(T)) Value {
     const vt: *const Value.VTable = switch (T) {
         f32 => &f32SliceVtable,

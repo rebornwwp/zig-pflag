@@ -101,6 +101,7 @@ const strToI64Vtable = strToIntVtableGen(i64);
 const strToU32Vtable = strToIntVtableGen(u32);
 const strToU64Vtable = strToIntVtableGen(u64);
 
+/// `k=v[,k2=v2]` map Value for `*StringToIntState(T)` (trim, plain split).
 pub fn stringToIntValue(comptime T: type, state: *StringToIntState(T)) Value {
     const vt: *const Value.VTable = switch (T) {
         i32 => &strToI32Vtable,
@@ -201,6 +202,7 @@ const strToStrVtable = Value.VTable{
     }.di,
 };
 
+/// `k=v[,k2=v2]` map Value over `*StringToStringState`; keys and values duped.
 pub fn stringToStringValue(state: *StringToStringState) Value {
     return .{ .ptr = @ptrCast(@alignCast(state)), .vtable = &strToStrVtable };
 }

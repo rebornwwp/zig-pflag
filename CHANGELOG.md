@@ -9,6 +9,7 @@ All notable changes to zig-pflag will be documented in this file.
 - `zig build run-examples` step to run all 12 allocator examples at once
 - Individual `zig build run-<name>` steps for each allocator example (e.g., `run-int_gpa`, `run-string_arena`)
 - `zig build docs` step: HTML API documentation via the compiler's `-femit-docs` bundle (index.html + wasm viewer + sources.tar for every reachable module) written to `zig-out/docs`; opt-in, not part of the CI sequence
+- Full `///` documentation coverage for the public API surface (every `Flag`/`FlagSet` field and method incl. all 40+ registration helpers, `Value`/`VTable` methods, the 16 `xxxValue` constructors, global `*CL` helpers, and the top-level entry-shell semantics — parse defaults, ownership contracts, Zig-vs-Go divergences like radix-0 leading zeros and silent float saturation); mechanically verified as comment-only changes with the 209-test suite green
 - 98 new tests (110 → 208 total) covering:
   - Complete slice type test suites (int32/int64/uint/float32/float64/bool/int/string_slice/string_array)
   - Error path tests (invalid values, overflow, unknown flags)
