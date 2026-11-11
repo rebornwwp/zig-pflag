@@ -161,9 +161,26 @@ pub fn stringArrayValue(state: *StringSliceState) Value {
     return .{ .ptr = @ptrCast(@alignCast(state)), .vtable = &stringArrayVtable };
 }
 
-// ─── Int Slice ───
+// ─── Shared numeric-slice vtable core ───
 
-fn intSliceVtable(comptime T: type) Value.VTable {
+fn parseIntBase0(comptime T: type, s: []const u8) !T {
+    return std.fmt.parseInt(T, s, 0);
+}
+
+fn parseFloat(comptime T: type, s: []const u8) !T {
+    return std.fmt.parseFloat(T, s);
+}
+
+/// Body shared by the int/uint/float numeric slices: first-Set replace
+/// semantics, comma split through `parse`, output joined with ", " under the
+/// `@typeName(T) ++ "s"` name. Bool slices keep their own vtable because
+/// upstream bool_slice.go quotes-strip + CSV reads (different semantics).
+/// `parse` is a comptime-known shim `fn (comptime Ty: type, s: []const u8) !Ty`
+/// — fn *types* cannot carry inferred error sets, hence the anytype.
+fn makeNumSliceVtable(
+    comptime T: type,
+    comptime parse: anytype,
+) Value.VTable {
     return .{
         .set = struct {
             fn set(ptr: *anyopaque, v: []const u8) !void {
@@ -178,7 +195,7 @@ fn intSliceVtable(comptime T: type) Value.VTable {
                 while (it.next()) |part| {
                     const trimmed = std.mem.trim(u8, part, " \t");
                     if (trimmed.len > 0) {
-                        try state.value.append(state.gpa, try std.fmt.parseInt(T, trimmed, 0));
+                        try state.value.append(state.gpa, try parse(T, trimmed));
                     }
                 }
             }
@@ -209,6 +226,12 @@ fn intSliceVtable(comptime T: type) Value.VTable {
             }
         }.di,
     };
+}
+
+// ─── Int Slice ───
+
+fn intSliceVtable(comptime T: type) Value.VTable {
+    return makeNumSliceVtable(T, parseIntBase0);
 }
 const i32SliceVtable = intSliceVtable(i32);
 const i64SliceVtable = intSliceVtable(i64);
@@ -225,51 +248,7 @@ pub fn intSliceValue(comptime T: type, state: *SliceState(T)) Value {
 // ─── Uint Slice ───
 
 fn uintSliceVtable(comptime T: type) Value.VTable {
-    return .{
-        .set = struct {
-            fn set(ptr: *anyopaque, v: []const u8) !void {
-                const state: *SliceState(T) = @ptrCast(@alignCast(ptr));
-                // First Set replaces defaults; subsequent Sets append (matches Go)
-                if (!state.changed) {
-                    state.value.clearRetainingCapacity();
-                    state.changed = true;
-                }
-                // Split by comma and parse each value
-                var it = std.mem.splitScalar(u8, v, ',');
-                while (it.next()) |part| {
-                    const trimmed = std.mem.trim(u8, part, " \t");
-                    if (trimmed.len > 0) {
-                        try state.value.append(state.gpa, try std.fmt.parseInt(T, trimmed, 0));
-                    }
-                }
-            }
-        }.set,
-        .string = struct {
-            fn string(ptr: *anyopaque, gpa: std.mem.Allocator) anyerror![]const u8 {
-                const state: *SliceState(T) = @ptrCast(@alignCast(ptr));
-                const slice = state.value;
-                var buf: std.ArrayListUnmanaged(u8) = .empty;
-                for (slice.items, 0..) |v, i| {
-                    if (i > 0) try buf.appendSlice(gpa, ", ");
-                    const formatted = try gpa.print("{d}", .{v});
-                    defer gpa.free(formatted);
-                    try buf.appendSlice(gpa, formatted);
-                }
-                return try buf.toOwnedSlice(gpa);
-            }
-        }.string,
-        .typeName = struct {
-            fn tn() []const u8 {
-                return @typeName(T) ++ "s";
-            }
-        }.tn,
-        .deinit = struct {
-            fn di(ptr: *anyopaque, gpa: std.mem.Allocator) void {
-                const state: *SliceState(T) = @ptrCast(@alignCast(ptr));
-                state.value.deinit(gpa);
-            }
-        }.di,
-    };
+    return makeNumSliceVtable(T, parseIntBase0);
 }
 const u8SliceVtable = uintSliceVtable(u8);
 const u16SliceVtable = uintSliceVtable(u16);
@@ -356,51 +335,7 @@ pub fn boolSliceValue(state: *SliceState(bool)) Value {
 // ─── Float Slice ───
 
 fn floatSliceVtable(comptime T: type) Value.VTable {
-    return .{
-        .set = struct {
-            fn set(ptr: *anyopaque, v: []const u8) !void {
-                const state: *SliceState(T) = @ptrCast(@alignCast(ptr));
-                // First Set replaces defaults; subsequent Sets append (matches Go)
-                if (!state.changed) {
-                    state.value.clearRetainingCapacity();
-                    state.changed = true;
-                }
-                // Split by comma and parse each value
-                var it = std.mem.splitScalar(u8, v, ',');
-                while (it.next()) |part| {
-                    const trimmed = std.mem.trim(u8, part, " \t");
-                    if (trimmed.len > 0) {
-                        try state.value.append(state.gpa, try std.fmt.parseFloat(T, trimmed));
-                    }
-                }
-            }
-        }.set,
-        .string = struct {
-            fn string(ptr: *anyopaque, gpa: std.mem.Allocator) anyerror![]const u8 {
-                const state: *SliceState(T) = @ptrCast(@alignCast(ptr));
-                const slice = state.value;
-                var buf: std.ArrayListUnmanaged(u8) = .empty;
-                for (slice.items, 0..) |v, i| {
-                    if (i > 0) try buf.appendSlice(gpa, ", ");
-                    const formatted = try gpa.print("{d}", .{v});
-                    defer gpa.free(formatted);
-                    try buf.appendSlice(gpa, formatted);
-                }
-                return try buf.toOwnedSlice(gpa);
-            }
-        }.string,
-        .typeName = struct {
-            fn tn() []const u8 {
-                return @typeName(T) ++ "s";
-            }
-        }.tn,
-        .deinit = struct {
-            fn di(ptr: *anyopaque, gpa: std.mem.Allocator) void {
-                const state: *SliceState(T) = @ptrCast(@alignCast(ptr));
-                state.value.deinit(gpa);
-            }
-        }.di,
-    };
+    return makeNumSliceVtable(T, parseFloat);
 }
 const f32SliceVtable = floatSliceVtable(f32);
 const f64SliceVtable = floatSliceVtable(f64);
