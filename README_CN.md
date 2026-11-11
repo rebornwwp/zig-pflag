@@ -4,7 +4,7 @@
 
 Zig 的 POSIX/GNU 风格命令行参数解析库，从 Go 的 [spf13/pflag](https://github.com/spf13/pflag) v1.0.9 移植而来。
 
-Zig 0.17.0 · 12 个源文件 · ~2500 行代码 · 208 个测试
+Zig 0.17.0 · 16 个库文件 · ~4050 行库代码 · 210 个测试
 
 ## 安装
 
@@ -171,11 +171,9 @@ pub fn main(init: std.process.Init) !void {
 
 ### 测试覆盖
 
-- **当前**：205 个测试（全部通过）
-- **Go pflag**：~191 个测试
-- **覆盖率**：~92% 的可移植测试
-
-缺失的测试是针对 Go 特有接口和不适用 Zig 的边缘情况。
+- **本工程**：210 个测试块——table-driven，合计数百个用例，并含 OOM 失败注入
+- **上游 Go pflag**：~191 个 Test 函数
+- 上游可移植的 parse/usage 场景几乎全部覆盖；此外还补了一套 Go 测试不涉及的 Zig 行为矩阵——radix-0 标量、float 静默钳位、slice 元素错误时原子提交（不部分写入）、各类型的 `-f=`/粘连/空格短形式，以及由 `checkAllAllocationFailures` 驱动的 OOM errdefer 路径。
 
 ## 示例
 
@@ -418,7 +416,12 @@ zig build build-examples
 
 ```
 src/
-├── pflag.zig          # Value、Flag、FlagSet、解析引擎
+├── value.zig          # Value 接口本体（ptr + vtable）
+├── internal.zig       # parseBool、CSV 读写、splitKeyValue 共享件
+├── usage.zig          # usage 渲染层
+├── parse.zig          # 参数解析引擎
+├── cmdline.zig        # 全局 CommandLine 单例与 *CL 便捷函数
+├── pflag.zig          # Flag、FlagSet、注册方法与入口薄壳
 ├── errors.zig         # ParseError、ErrorHandling
 ├── bool_types.zig     # Bool 参数类型
 ├── int_types.zig      # Int 类型（i8–i64，comptime 泛型）
@@ -429,16 +432,19 @@ src/
 ├── duration_types.zig # Duration 类型（s/m/h/d）
 ├── slice_types.zig    # string/int/uint/bool/float 切片
 ├── map_types.zig      # string→int、string→string map
-├── pflag_test.zig     # 92 个核心 FlagSet 测试
-├── bool_types.zig     # bool + 10 个测试
-├── int_types.zig      # int + 8 个测试
-├── uint_types.zig     # uint + 5 个测试
-├── float_types.zig    # float + 5 个测试
-├── count_types.zig    # count + 10 个测试
-├── duration_types.zig # duration + 8 个测试
-├── string_types.zig   # string + 7 个测试
-├── slice_types.zig    # slice/array + 47 个测试
-└── map_types.zig      # map + 22 个测试
+├── pflag_test.zig     # 46 个核心 FlagSet 测试
+├── parse_test.zig     # 42 个解析引擎测试（含 Go testParse 移植）
+├── usage_test.zig     # 28 个 usage 渲染测试
+├── testutil.zig       # 共享测试 helper
+├── bool_types.zig     # bool + 4 个测试
+├── int_types.zig      # int + 4 个测试
+├── uint_types.zig     # uint + 3 个测试
+├── float_types.zig    # float + 4 个测试
+├── count_types.zig    # count + 2 个测试
+├── duration_types.zig # duration + 5 个测试
+├── string_types.zig   # string + 3 个测试
+├── slice_types.zig    # slice/array + 54 个测试
+└── map_types.zig      # map + 15 个测试
 
 examples/
 ├── demo.zig           # 完整示例（所有参数类型）

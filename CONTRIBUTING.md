@@ -17,8 +17,8 @@ licensed under the BSD 3-Clause License that covers this project.
 # Clone and verify
 git clone https://github.com/rebornwwp/zig-pflag.git
 cd zig-pflag
-zig build test          # Run all 89 tests
-zig fmt --check src/    # Check code formatting
+zig build test          # Run all 210 tests
+zig fmt --check src/ examples/ build.zig   # CI formatting scope
 
 # Format code before committing
 zig fmt src/
@@ -38,7 +38,12 @@ zig build run-demo -- -v --name=zig --count=42
 
 ```
 src/
-├── pflag.zig          # Value interface, Flag, FlagSet, parse engine
+├── value.zig          # Value interface (ptr + vtable)
+├── internal.zig       # parseBool, CSV read/write, splitKeyValue
+├── usage.zig          # usage rendering layer
+├── parse.zig          # argument parsing engine (free functions)
+├── cmdline.zig        # global CommandLine singleton (*CL helpers)
+├── pflag.zig          # Flag, FlagSet, registration, entry shells
 ├── errors.zig         # ParseError, ErrorHandling enums
 ├── bool_types.zig     # Bool flag type
 ├── int_types.zig      # Int types (i8–i64, comptime-generic)
@@ -49,7 +54,10 @@ src/
 ├── duration_types.zig # Duration type (s/m/h/d)
 ├── slice_types.zig    # string/int/uint/bool/float slices
 ├── map_types.zig      # string→int, string→string maps
-└── pflag_test.zig     # 89 tests
+├── pflag_test.zig     # 46 core FlagSet tests
+├── parse_test.zig     # 42 parse-engine tests
+├── usage_test.zig     # 28 usage-rendering tests
+└── testutil.zig       # shared test helpers
 ```
 
 ## Checklist Before Submitting

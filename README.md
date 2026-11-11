@@ -4,7 +4,7 @@
 
 POSIX/GNU-style flag parsing for Zig, ported from Go's [spf13/pflag](https://github.com/spf13/pflag) v1.0.9.
 
-Zig 0.17.0 · 16 library files · ~3700 lines · 209 tests
+Zig 0.17.0 · 16 library files · ~4050 lines · 210 tests
 
 ## Installation
 
@@ -171,11 +171,14 @@ These are rare edge cases. The parser handles the common cases: comma separation
 
 ### Test Coverage
 
-- **Current**: 163 tests (all passing)
-- **Go pflag**: ~191 tests
-- **Coverage**: ~92% of portable tests
-
-The missing tests are for Go-specific interfaces and edge cases that don't apply to Zig.
+- **Zig suite**: 210 test blocks — table-driven, so hundreds of case
+  variants in total, including allocation-failure injection
+- **Upstream Go pflag**: ~191 `Test` functions
+- Nearly every portable parse/usage scenario upstream exercises is ported.
+  On top of that the suite carries Zig-behavior matrices no Go test can
+  cover: radix-0 scalars, silent float saturation, atomic slice commit on a
+  bad element, `-f=`/glued/separated shorthand paths per type, and the OOM
+  errdefer paths driven by `std.testing.checkAllAllocationFailures`.
 
 ## Demo
 
@@ -470,7 +473,7 @@ src/
 ├── count_types.zig    # count + 2 tests
 ├── duration_types.zig # duration + 5 tests
 ├── string_types.zig   # string + 3 tests
-├── slice_types.zig    # slice/array + 53 tests
+├── slice_types.zig    # slice/array + 54 tests
 └── map_types.zig      # map + 15 tests
 
 examples/
