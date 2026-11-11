@@ -5,6 +5,7 @@
 //!   value.zig        — Value interface (ptr + vtable)
 //!   internal.zig     — shared leaf helpers (CSV, bool parse, key=value)
 //!   usage.zig        — usage/help line rendering + word wrap
+//!   parse.zig        — argument parsing engine (argLoop/longArg/shortArg)
 //!   cmdline.zig      — global CommandLine singleton (*CL helpers)
 //!   pflag.zig        — Flag, FlagSet, parse logic
 //!   errors.zig       — Error types
@@ -28,6 +29,7 @@ comptime {
 
 const std = @import("std");
 const usage_fmt = @import("usage.zig");
+const parse_engine = @import("parse.zig");
 
 // ─── Error types ───
 pub const errors = @import("errors.zig");
@@ -346,17 +348,7 @@ pub const FlagSet = struct {
     pub fn set(self: *FlagSet, name: []const u8, value: []const u8) !void {
         const flag = self.lookup(name) orelse return error.NoSuchFlag;
         try flag.value.set(value);
-        try self.markAsParsed(flag);
-    }
-
-    fn markAsParsed(self: *FlagSet, flag: *Flag) !void {
-        const gpa = self.gpa;
-        if (!self.actual.contains(flag.name)) {
-            try self.actual.put(gpa, flag.name, flag);
-            errdefer _ = self.actual.remove(flag.name);
-            try self.ordered_actual.append(gpa, flag);
-        }
-        flag.changed = true;
+        try parse_engine.markParsed(self, flag);
     }
 
     pub fn parsedFlag(self: *const FlagSet) bool {
@@ -471,7 +463,7 @@ pub const FlagSet = struct {
         const saved_cb = self._parse_callback;
         self._parse_callback = callback;
         defer self._parse_callback = saved_cb;
-        self.parseArgLoop(&remaining) catch |err| {
+        parse_engine.argLoop(self, &remaining) catch |err| {
             return switch (self.error_handling) {
                 .continue_on_error => err,
                 .exit_on_error => std.process.exit(2),
@@ -498,16 +490,6 @@ pub const FlagSet = struct {
         self.interspersed = b;
     }
 
-    fn applyValue(self: *FlagSet, flag: *Flag, value: []const u8) !void {
-        if (self._parse_callback) |cb| try cb(flag, value) else try flag.value.set(value);
-    }
-
-    fn doFailWith(self: *FlagSet, kind: ParseError.ErrorKind, name: []const u8, err: anyerror) anyerror {
-        self._last_error = ParseError.init(kind, name);
-        if (self.error_handling != .continue_on_error) self.printUsage();
-        return err;
-    }
-
     pub fn lastError(self: *const FlagSet) ParseError {
         return self._last_error;
     }
@@ -515,125 +497,7 @@ pub const FlagSet = struct {
         if (self.usage_callback) |cb| cb(self) else defaultUsage(self);
     }
 
-    fn parseLongArg(self: *FlagSet, s: []const u8, remaining: *[]const []const u8) !void {
-        var name: []const u8 = undefined;
-        var value: []const u8 = undefined;
-        var has_value: bool = false;
-
-        if (std.mem.indexOfScalar(u8, s[2..], '=')) |eq_idx| {
-            name = s[2 .. eq_idx + 2];
-            value = s[eq_idx + 3 ..];
-            has_value = true;
-        } else {
-            name = s[2..];
-        }
-
-        const flag = self.lookup(name);
-        if (flag == null) {
-            if (name.len > 0 and self.parse_errors_allowlist.unknown_flags) {
-                return;
-            }
-            return self.doFailWith(.unknown_flag, name, error.NoSuchFlag);
-        }
-        const f = flag.?;
-
-        if (f.deprecated.len > 0) {
-            if (self.out_writer) |w| w.print("Flag --{s} has been deprecated, {s}\n", .{ f.name, f.deprecated }) catch {};
-        }
-
-        if (!has_value) {
-            if (f.no_opt_def_val.len > 0) {
-                // Flag has a default value for when no option is provided (bool=true, count=+1)
-                value = f.no_opt_def_val;
-            } else if (remaining.len > 0) {
-                value = remaining.*[0];
-                remaining.* = remaining.*[1..];
-            } else return self.doFailWith(.value_required, f.name, error.ValueRequired);
-        }
-        try applyValue(self, f, value);
-        try self.markAsParsed(f);
-    }
-
-    fn parseSingleShortArg(self: *FlagSet, shorthands: *[]const u8, remaining: *[]const []const u8) !void {
-        const c = shorthands.*[0];
-        const flag = self.shorthandLookup(c);
-        if (flag == null) {
-            if (self.parse_errors_allowlist.unknown_flags) {
-                shorthands.* = shorthands.*[1..];
-                return;
-            }
-            return self.doFailWith(.unknown_shorthand, blk: {
-                self._shorthand_err_buf[0] = c;
-                break :blk &self._shorthand_err_buf;
-            }, error.NoSuchFlag);
-        }
-        const f = flag.?;
-
-        if (f.shorthand_deprecated.len > 0) {
-            if (self.out_writer) |w| w.print("Flag shorthand -{s} has been deprecated, {s}\n", .{ f.shorthand, f.shorthand_deprecated }) catch {};
-        }
-
-        var value: []const u8 = undefined;
-        if (shorthands.len > 2 and shorthands.*[1] == '=') {
-            value = shorthands.*[2..];
-            shorthands.* = "";
-        } else if (f.no_opt_def_val.len > 0) {
-            value = f.no_opt_def_val;
-            shorthands.* = shorthands.*[1..];
-        } else if (shorthands.len > 1) {
-            value = shorthands.*[1..];
-            shorthands.* = "";
-        } else if (remaining.len > 0) {
-            value = remaining.*[0];
-            remaining.* = remaining.*[1..];
-            shorthands.* = "";
-        } else return self.doFailWith(.value_required, f.name, error.ValueRequired);
-
-        try applyValue(self, f, value);
-        try self.markAsParsed(f);
-    }
-
-    fn parseShortArg(self: *FlagSet, s: []const u8, remaining: *[]const []const u8) !void {
-        var sh: []const u8 = s[1..];
-        while (sh.len > 0) try self.parseSingleShortArg(&sh, remaining);
-    }
-
-    fn parseArgLoop(self: *FlagSet, remaining: *std.ArrayListUnmanaged([]const u8)) !void {
-        const gpa = self.gpa;
-        var i: usize = 0;
-        while (i < remaining.items.len) {
-            const s = remaining.items[i];
-            i += 1;
-            if (s.len == 0 or s[0] != '-' or s.len == 1) {
-                if (!self.interspersed) {
-                    try self.args.append(gpa, s);
-                    try self.args.appendSlice(gpa, remaining.items[i..]);
-                    remaining.clearAndFree(gpa);
-                    return;
-                }
-                try self.args.append(gpa, s);
-                continue;
-            }
-            if (s[1] == '-') {
-                if (s.len == 2) {
-                    self.args_len_at_dash = @intCast(self.args.items.len);
-                    try self.args.appendSlice(gpa, remaining.items[i..]);
-                    remaining.clearAndFree(gpa);
-                    break;
-                }
-                var rest: []const []const u8 = remaining.items[i..];
-                try self.parseLongArg(s, &rest);
-                const consumed = (remaining.items.len - i) - rest.len;
-                i += consumed;
-            } else {
-                var rest: []const []const u8 = remaining.items[i..];
-                try self.parseShortArg(s, &rest);
-                const consumed = (remaining.items.len - i) - rest.len;
-                i += consumed;
-            }
-        }
-    }
-
+    /// Entry shell: tokenization itself lives in parse.zig (argLoop).
     pub fn parse(self: *FlagSet, arguments: []const []const u8) !void {
         const gpa = self.gpa;
         self.parsed = true;
@@ -646,7 +510,7 @@ pub const FlagSet = struct {
         defer remaining.deinit(gpa);
         try remaining.appendSlice(gpa, arguments);
 
-        self.parseArgLoop(&remaining) catch |err| {
+        parse_engine.argLoop(self, &remaining) catch |err| {
             return switch (self.error_handling) {
                 .continue_on_error => err,
                 .exit_on_error => std.process.exit(2),
