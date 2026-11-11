@@ -206,6 +206,8 @@ zig build run-demo -- \
   --expose=80 --expose=443 --expose=8080 \
   --flag --flag --flag \
   --score=9.5 --score=8.0 --score=7.5 \
+  --udp=53 --udp=123,9 \
+  --file=report.txt --file=a,b \
   --header=Content-Length=100 --header=X-Timeout=30 \
   --label=env=prod --label=region=us-east \
   arg1 arg2 arg3
@@ -216,33 +218,37 @@ zig build run-demo -- \
 ```
 Flag defaults (before parsing)
   -v, --verbose
-    	enable verbose output
+        enable verbose output
       --count=0
-    	the count (int32)
+        the count (int32)
       --big=0
-    	64-bit integer (deprecated: use --count instead)
+        64-bit integer (deprecated: use --count instead)
   -p, --port=8080
-    	port number
+        port number
       --rate=1
-    	request rate
+        request rate
   -n, --name=world
-    	your name
+        your name
   -V, --verbosity=0
-    	verbosity level
+        verbosity level
       --timeout=0s
-    	timeout (30s/5m/2h/1d)
-  -t, --tag
-    	tags (repeatable)
+        timeout (30s/5m/2h/1d)
+  -t, --tag=default
+        tags (repeatable)
       --expose
-    	exposed ports
+        exposed ports
       --flag
-    	bool flags
+        bool flags
       --score
-    	scores
+        scores
+      --udp
+        udp ports (uintSlice)
+      --file
+        files (stringArray: stored verbatim)
       --header
-    	headers as key=value
+        headers as key=value
       --label
-    	labels as key=value
+        labels as key=value
 
 Parsed values
   verbose  = true
@@ -255,7 +261,6 @@ Parsed values
   timeout  = 30000000000
 
 Slice values
-  tag = default
   tag = web
   tag = api
   tag = v2
@@ -265,6 +270,14 @@ Slice values
   score = 9.5
   score = 8
   score = 7.5
+  flag = true
+  flag = true
+  flag = true
+  udp = 53
+  udp = 123
+  udp = 9
+  file = report.txt
+  file = a,b
 
 Map values
   X-Timeout = 30
@@ -290,40 +303,46 @@ Flags that were set
   --expose (changed=true)
   --flag (changed=true)
   --score (changed=true)
+  --udp (changed=true)
+  --file (changed=true)
   --header (changed=true)
   --label (changed=true)
 
-  nFlag() = 14, changed(verbose) = true
+  nFlag() = 16, changed(verbose) = true
 
 Flag usages (text)
   -v, --verbose
-    	enable verbose output
+        enable verbose output
       --count=0
-    	the count (int32)
+        the count (int32)
       --big=0
-    	64-bit integer (deprecated)
+        64-bit integer (deprecated: use --count instead)
   -p, --port=8080
-    	port number
+        port number
       --rate=1
-    	request rate
+        request rate
   -n, --name=world
-    	your name
+        your name
   -V, --verbosity=0
-    	verbosity level
+        verbosity level
       --timeout=0s
-    	timeout (30s/5m/2h/1d)
-  -t, --tag
-    	tags (repeatable)
+        timeout (30s/5m/2h/1d)
+  -t, --tag=default
+        tags (repeatable)
       --expose
-    	exposed ports
+        exposed ports
       --flag
-    	bool flags
+        bool flags
       --score
-    	scores
+        scores
+      --udp
+        udp ports (uintSlice)
+      --file
+        files (stringArray: stored verbatim)
       --header
-    	headers as key=value
+        headers as key=value
       --label
-    	labels as key=value
+        labels as key=value
   annotation[name][category] = basic
 ```
 

@@ -45,6 +45,13 @@ pub fn main(init: std.process.Init) !void {
     var scores_state = pflag.SliceState(f32){ .value = &scores, .gpa = gpa };
     try fs.floatSliceVar(f32, &scores_state, "score", &.{}, "scores");
 
+    var udp: std.ArrayListUnmanaged(u16) = .empty;
+    var udp_state = pflag.SliceState(u16){ .value = &udp, .gpa = gpa };
+    try fs.uintSliceVar(u16, &udp_state, "udp", &.{}, "udp ports (uintSlice)");
+    var files: std.ArrayListUnmanaged([]const u8) = .empty;
+    var files_state = pflag.StringArrayState{ .value = &files, .gpa = gpa };
+    try fs.stringArrayVar(&files_state, "file", &.{}, "files (stringArray: stored verbatim)");
+
     var headers: std.StringHashMapUnmanaged(i32) = .empty;
     var headers_state = pflag.StringToIntState(i32){ .value = &headers, .gpa = gpa };
     try fs.stringToIntVar(i32, &headers_state, "header", 0, "headers as key=value");
@@ -101,6 +108,15 @@ pub fn main(init: std.process.Init) !void {
     } else try w(stdout_writer, "  (none)");
     if (scores.items.len > 0) {
         for (scores.items) |s| try p(stdout_writer, "  score = {d}", .{s});
+    } else try w(stdout_writer, "  (none)");
+    if (flags.items.len > 0) {
+        for (flags.items) |flg| try p(stdout_writer, "  flag = {}", .{flg});
+    } else try w(stdout_writer, "  (none)");
+    if (udp.items.len > 0) {
+        for (udp.items) |u| try p(stdout_writer, "  udp = {d}", .{u});
+    } else try w(stdout_writer, "  (none)");
+    if (files.items.len > 0) {
+        for (files.items) |f| try p(stdout_writer, "  file = {s}", .{f});
     } else try w(stdout_writer, "  (none)");
 
     try h("Map values", stdout_writer);

@@ -30,6 +30,8 @@ All notable changes to zig-pflag will be documented in this file.
   - `bool_types.zig`: the `BoolVar` table gains shorthand-with-equals spellings (`-v=false`/`-v=true`) — the `=` strip runs BEFORE `NoOptDefVal`, so bare `-v` is true while `-v=false` is false (matches Go)
   - `parse_test.zig`: the invalid-argument paths now assert the concrete error kind through `fs.parse` (f32 and f64 → `InvalidCharacter`) instead of bare `catch {}`
 
+- `examples/demo.zig` now exercises every ported flag family: added the last two missing registrations — `uintSlice` (`--udp=53 --udp=123,9`) and `stringArray` (`--file=report.txt --file=a,b`, demonstrating verbatim storage vs the CSV-splitting slices) — plus per-element printout of the bool slice, uint slice and string array values. README and README_CN demo commands and expected-output fences were re-captured byte-for-byte from `zig build run-demo`, replacing snapshots that still carried the pre-refactor tab-indented usage rendering and a stale `tag = default` line (first-Set-replaces means `-t` parses show only the new values).
+
 ### Changed
 
 - **Minimum Zig version is now 0.17.0** (tagged `v0.16.0` marks the last Zig 0.16.x release)
@@ -48,6 +50,10 @@ All notable changes to zig-pflag will be documented in this file.
   - `src/pflag_test.zig` split by concern: parse-engine tests → `parse_test.zig` (42), usage-rendering tests → `usage_test.zig` (28), shared helpers → `testutil.zig`, core registry/getter tests stay in `pflag_test.zig` (46)
 - **User-visible text change in usage output** (result of unifying the duplicated render stacks, worth calling out despite living under "internal"): `FlagUsages`/`FlagUsagesWrapped` now render deprecated flags as `" (deprecated: msg)"`, matching `PrintDefaults`; previously the string-returning path emitted only `" (deprecated)"` with no message. If you diff help text or snapshot it, this line changes.
 - **Numeric/bool slices now commit atomically on a failed element** (upstream-parity fix): `intSlice`/`uintSlice`/`floatSlice` (via `makeNumSliceVtable`) and `boolSlice` used to clear defaults (first Set) and append already-converted elements *before* a later bad element errored, so a failing `Set` could leave the bound slice half-populated and consume the replace-defaults state. They now build the parsed list in a local buffer first, like upstream: on error nothing commits, `changed` stays unset, and defaults or previously parsed values survive. (`-0` still parses to zero in uint slices, and real negatives yield `Overflow`, matching the scalar widths via Zig's radix-0 `parseInt`.)
+
+### Fixed
+
+- `formatDuration(0)` now returns `"0s"`, matching upstream's canonical zero spelling; previously the day-branch guard (`0 % ns_per_day == 0`) captured zero first, so duration defaults rendered as `--timeout=0d` in usage output. A zero case was added to the format/parse round-trip table (test count unchanged).
 
 ## [0.1.0] - 2026-05-24
 

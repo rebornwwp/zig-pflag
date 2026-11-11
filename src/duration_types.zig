@@ -62,6 +62,9 @@ pub fn parseDuration(s: []const u8) !i64 {
 }
 
 pub fn formatDuration(ns: i64, gpa: std.mem.Allocator) ![]const u8 {
+    // Zero matches upstream's canonical "0s" spelling and must not be
+    // captured by the day-branch below (0 % ns_per_day == 0).
+    if (ns == 0) return gpa.print("0s", .{});
     if (@rem(ns, std.time.ns_per_day) == 0) return gpa.print("{d}d", .{@divFloor(ns, std.time.ns_per_day)});
     if (@rem(ns, std.time.ns_per_hour) == 0) return gpa.print("{d}h", .{@divFloor(ns, std.time.ns_per_hour)});
     if (@rem(ns, std.time.ns_per_min) == 0) return gpa.print("{d}m", .{@divFloor(ns, std.time.ns_per_min)});
@@ -157,6 +160,7 @@ test "formatDuration roundtrips with parseDuration" {
     };
 
     const testCases = [_]TestCase{
+        .{ .ns = 0, .expected = "0s" }, // canonical upstream zero spelling
         .{ .ns = std.time.ns_per_day, .expected = "1d" },
         .{ .ns = 2 * std.time.ns_per_hour, .expected = "2h" },
         .{ .ns = 30 * std.time.ns_per_min, .expected = "30m" },
