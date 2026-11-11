@@ -14,6 +14,15 @@ All notable changes to zig-pflag will be documented in this file.
   - Boundary condition tests (empty values, Unicode, negative numbers, scientific notation)
   - Integration tests (mixed flag types, real-world scenarios)
   - Remaining Go pflag tests (BoolP, StringSlice, StringArray, Usage formatting)
+- Post-refactor scalar coverage expansion (expectations measured against actual Zig 0.17 behavior) —
+  suite total 205 → 209 blocks, hundreds of new table cases:
+  - `int_types.zig`: radix-0 forms (`+42`, `0X2A`, `0b101010`, underscores, and the Zig-vs-Go divergence that a leading `0` stays DECIMAL: `010` → 10), glued/`=`/separate shorthand syntax, full min/max bounds + off-by-one overflow across i8/i16/i32/i64, six invalid forms per width, `string()` decimal normalization incl. `@typeName`
+  - `uint_types.zig`: same matrix for u8–u64 plus `-1`/`-9999` → Overflow and `-0` → 0 signed-zero edge
+  - `float_types.zig`: `.5`/`5.`/`1E3`/exponents/underscores, specials (`inf`/`-Inf`/`infinity`/`NaN` lowercase forms), silent saturation documented (`1e400` → +inf, `1e-400` → 0, f32 `4e38` → inf, no ErrRange like Go), decimal `string()` forms (`1e20` → `100000000000000000000`)
+  - `bool_types.zig`: extra spellings (`T`/`F`/`tRuE`), direct-`set()` forms incl. empty-string-is-true
+  - `count_types.zig`: explicit negative/hex/plus values, `=N`-then-bare increment composition, typeName assertion
+  - `duration_types.zig`: negative/plus/zero values, malformed-input taxonomy (`InvalidDuration` vs `InvalidCharacter` vs parse-stage `Overflow`)
+  - `slice_types.zig`: radix-0/underscore/negative/exponent elements in int/uint/float slice sets
 
 ### Changed
 
@@ -28,7 +37,7 @@ All notable changes to zig-pflag will be documented in this file.
   - usage/help rendering extracted to `src/usage.zig`; the previously duplicated string-based and writer-based render stacks were unified behind `std.Io.Writer` (its user-visible consequence is listed separately below — it is not purely internal)
   - the process-global CommandLine singleton and `*CL` helpers moved to `src/cmdline.zig`, flat-re-exported from `pflag.zig` (the flat names are the only public access; `pflag.cmdline` itself is file-private)
   - the parse engine (`argLoop`/`longArg`/`shortArg`, `applyValue`/`doFailWith`/`markParsed`) lives in `src/parse.zig` as free functions taking `*FlagSet`; `FlagSet.parse`/`parseAll` are thin delegating shells; `pflag.zig` shrank 879 → ~560 lines
-  - int/uint/float slice vtables now share `makeNumSliceVtable(T, comptime parse)`; behavior unchanged (203→205-test suite stayed green throughout, zero test edits)
+  - int/uint/float slice vtables now share `makeNumSliceVtable(T, comptime parse)`; behavior unchanged (the 205-test suite stayed green throughout, zero test edits)
   - `src/pflag_test.zig` split by concern: parse-engine tests → `parse_test.zig` (42), usage-rendering tests → `usage_test.zig` (28), shared helpers → `testutil.zig`, core registry/getter tests stay in `pflag_test.zig` (46)
 - **User-visible text change in usage output** (result of unifying the duplicated render stacks, worth calling out despite living under "internal"): `FlagUsages`/`FlagUsagesWrapped` now render deprecated flags as `" (deprecated: msg)"`, matching `PrintDefaults`; previously the string-returning path emitted only `" (deprecated)"` with no message. If you diff help text or snapshot it, this line changes.
 

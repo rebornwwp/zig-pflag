@@ -4,7 +4,7 @@
 
 POSIX/GNU-style flag parsing for Zig, ported from Go's [spf13/pflag](https://github.com/spf13/pflag) v1.0.9.
 
-Zig 0.17.0 · 12 source files · ~2500 lines · 205 tests
+Zig 0.17.0 · 16 library files · ~3700 lines · 209 tests
 
 ## Installation
 
@@ -438,15 +438,15 @@ src/
 ├── parse_test.zig     # 42 parse-engine tests (Go testParse port incl.)
 ├── usage_test.zig     # 28 usage-rendering tests
 ├── testutil.zig       # shared test helpers
-├── bool_types.zig     # bool + 10 tests
-├── int_types.zig      # int + 8 tests
-├── uint_types.zig     # uint + 5 tests
-├── float_types.zig    # float + 5 tests
-├── count_types.zig    # count + 10 tests
-├── duration_types.zig # duration + 8 tests
-├── string_types.zig   # string + 7 tests
-├── slice_types.zig    # slice/array + 47 tests
-└── map_types.zig      # map + 22 tests
+├── bool_types.zig     # bool + 4 tests
+├── int_types.zig      # int + 4 tests
+├── uint_types.zig     # uint + 3 tests
+├── float_types.zig    # float + 4 tests
+├── count_types.zig    # count + 2 tests
+├── duration_types.zig # duration + 5 tests
+├── string_types.zig   # string + 3 tests
+├── slice_types.zig    # slice/array + 53 tests
+└── map_types.zig      # map + 15 tests
 
 examples/
 ├── demo.zig           # Full demo (all flag types)
