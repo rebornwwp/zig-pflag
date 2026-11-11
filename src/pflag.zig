@@ -5,6 +5,7 @@
 //!   value.zig        — Value interface (ptr + vtable)
 //!   internal.zig     — shared leaf helpers (CSV, bool parse, key=value)
 //!   usage.zig        — usage/help line rendering + word wrap
+//!   cmdline.zig      — global CommandLine singleton (*CL helpers)
 //!   pflag.zig        — Flag, FlagSet, parse logic
 //!   errors.zig       — Error types
 //!   bool_types.zig   — Bool flag type
@@ -680,43 +681,16 @@ pub fn newFlagSet(gpa: std.mem.Allocator, name: []const u8) FlagSet {
     return FlagSet.init(gpa, name);
 }
 
-var commandLine: ?FlagSet = null;
-
-pub fn initCommandLine(gpa: std.mem.Allocator) void {
-    commandLine = FlagSet.init(gpa, "program");
-}
-pub fn getCommandLine(gpa: std.mem.Allocator) *FlagSet {
-    if (commandLine == null) initCommandLine(gpa);
-    return &commandLine.?;
-}
-pub fn deinitCommandLine() void {
-    if (commandLine) |*cl| {
-        cl.deinit();
-        commandLine = null;
-    }
-}
-pub fn boolCL(p: *bool, name: []const u8, value: bool, usage: []const u8) !void {
-    const cl = getCommandLine(std.heap.page_allocator);
-    try cl.boolVar(p, name, value, usage);
-}
-pub fn intCL(comptime T: type, p: *T, name: []const u8, value: T, usage: []const u8) !void {
-    const cl = getCommandLine(std.heap.page_allocator);
-    try cl.intVar(T, p, name, value, usage);
-}
-pub fn stringCL(p: *[]const u8, name: []const u8, value: []const u8, usage: []const u8) !void {
-    const cl = getCommandLine(std.heap.page_allocator);
-    try cl.stringVar(p, name, value, usage);
-}
-pub fn parseCL(arguments: []const []const u8) !void {
-    const cl = getCommandLine(std.heap.page_allocator);
-    try cl.parse(arguments);
-}
-pub fn argsCL() []const []const u8 {
-    if (commandLine) |*cl| return cl.argList() else return &.{};
-}
-pub fn nArgCL() usize {
-    if (commandLine) |*cl| return cl.nArg() else return 0;
-}
-pub fn nFlagCL() usize {
-    if (commandLine) |*cl| return cl.nFlag() else return 0;
-}
+// The process-global CommandLine singleton lives in cmdline.zig; re-exported
+// flat so historical `pflag.boolCL(...)` style calls keep resolving.
+pub const cmdline = @import("cmdline.zig");
+pub const initCommandLine = cmdline.initCommandLine;
+pub const getCommandLine = cmdline.getCommandLine;
+pub const deinitCommandLine = cmdline.deinitCommandLine;
+pub const boolCL = cmdline.boolCL;
+pub const intCL = cmdline.intCL;
+pub const stringCL = cmdline.stringCL;
+pub const parseCL = cmdline.parseCL;
+pub const argsCL = cmdline.argsCL;
+pub const nArgCL = cmdline.nArgCL;
+pub const nFlagCL = cmdline.nFlagCL;
