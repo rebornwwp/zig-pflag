@@ -15,8 +15,8 @@ fn boolSetFn(ptr: *anyopaque, v: []const u8) !void {
     p.* = try parseBool(v);
 }
 
-/// Re-exported from internal.zig so `pflag.bool_types.parseBool` stays valid.
-pub const parseBool = @import("internal.zig").parseBool;
+// File-local alias; the public path is `pflag.parseBool` (re-exported in pflag.zig).
+const parseBool = @import("internal.zig").parseBool;
 fn boolStrFn(ptr: *anyopaque, gpa: std.mem.Allocator) anyerror![]const u8 {
     const val = (@as(*bool, @ptrCast(@alignCast(ptr)))).*;
     return gpa.dupe(u8, if (val) "true" else "false");

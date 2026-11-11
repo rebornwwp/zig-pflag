@@ -34,15 +34,21 @@ const usage_fmt = @import("usage.zig");
 const parse_engine = @import("parse.zig");
 
 // ─── Error types ───
-pub const errors = @import("errors.zig");
+// All module imports in this file are FILE-PRIVATE: the published surface is
+// the flat names below, never a namespace table (no `pflag.errors`,
+// no `pflag.bool_types`, ...). Keep it that way when adding features.
+const errors = @import("errors.zig");
 pub const ErrorHandling = errors.ErrorHandling;
 pub const ParseErrorsAllowlist = errors.ParseErrorsAllowlist;
 pub const ParseError = errors.ParseError;
 
-// ─── Shared leaf helpers (CSV / bool parsing / key=value) ───
-// File-private alias only — the helpers reach the public surface through the
-// *_types.zig re-exports, so `pflag.internal` stays unexported by design.
+// ─── Shared leaf helpers ───
+// canonical homes are internal.zig; these three are part of the public API
+// (custom Value implementations and round-trip tooling need them).
 const internal = @import("internal.zig");
+pub const parseBool = internal.parseBool;
+pub const readAsCSV = internal.readAsCSV;
+pub const writeAsCSV = internal.writeAsCSV;
 
 // ─── Value Interface ───
 // The interface itself lives in value.zig (no dependency on this file), so
@@ -52,16 +58,18 @@ const internal = @import("internal.zig");
 pub const Value = @import("value.zig").Value;
 
 // ─── Built-in Value Types ───
+// Implementation modules stay file-private; every user-facing symbol is
+// flat-re-exported below (ctors + State structs).
 
-pub const bool_types = @import("bool_types.zig");
-pub const int_types = @import("int_types.zig");
-pub const uint_types = @import("uint_types.zig");
-pub const float_types = @import("float_types.zig");
-pub const string_types = @import("string_types.zig");
-pub const count_types = @import("count_types.zig");
-pub const duration_types = @import("duration_types.zig");
-pub const slice_types = @import("slice_types.zig");
-pub const map_types = @import("map_types.zig");
+const bool_types = @import("bool_types.zig");
+const int_types = @import("int_types.zig");
+const uint_types = @import("uint_types.zig");
+const float_types = @import("float_types.zig");
+const string_types = @import("string_types.zig");
+const count_types = @import("count_types.zig");
+const duration_types = @import("duration_types.zig");
+const slice_types = @import("slice_types.zig");
+const map_types = @import("map_types.zig");
 
 pub const boolValue = bool_types.boolValue;
 pub const intValue = int_types.intValue;

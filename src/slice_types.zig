@@ -39,10 +39,10 @@ pub const StringSliceState = struct {
     changed: bool = false,
 };
 
-/// Re-exported from internal.zig so `pflag.slice_types.readAsCSV` (and the
-/// local call sites below) stay valid; upstream keeps these in string_slice.go.
-pub const readAsCSV = @import("internal.zig").readAsCSV;
-pub const writeAsCSV = @import("internal.zig").writeAsCSV;
+// File-local aliases; the public paths are `pflag.readAsCSV`/`pflag.writeAsCSV`,
+// both canonically defined in internal.zig (upstream keeps these in string_slice.go).
+const readAsCSV = @import("internal.zig").readAsCSV;
+const writeAsCSV = @import("internal.zig").writeAsCSV;
 
 const stringSliceVtable = Value.VTable{
     .set = struct {
