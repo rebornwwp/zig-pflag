@@ -381,6 +381,7 @@ zig build build-examples
 | `zig build run-demo` | Full demo (all flag types) |
 | `zig build run-struct-config` | Struct field binding |
 | `zig build build-examples` | Compile all 15 examples |
+| `zig build docs` | Generate HTML API docs → `zig-out/docs` (open `index.html`) |
 
 ## FlagSet API
 

@@ -12,6 +12,7 @@ zig-pflag:Go [spf13/pflag v1.0.9](https://github.com/spf13/pflag) 的 Zig 移植
 zig build test                              # 跑全部 209 个测试(唯一测试入口)
 zig build test --summary all                # 逐条列出测试名
 zig build build-examples                    # 编译 15 个示例(demo 由 zig build 单独编译)
+zig build docs                              # 生成 HTML API 文档到 zig-out/docs(编译器 -femit-docs 包,可选步骤,不进 CI)
 zig build                                   # 编译库 + demo
 zig build run-demo -- -v --count=42         # -- 后的参数透传给 demo
 zig build run-struct-config -- --port=3000  # struct 字段绑定示例

@@ -31,6 +31,21 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run pflag tests");
     test_step.dependOn(&run_tests.step);
 
+    // ── HTML API documentation ──
+    // Compiler -femit-docs bundle (index.html + wasm viewer + sources.tar)
+    // rooted at src/pflag.zig, which reaches every module via file imports.
+    // Opt-in step so `zig build` and CI stay lean. Relative paths rely on the
+    // Run step inheriting the invocation CWD (the repo root).
+    const docs_run = b.addSystemCommand(&.{
+        b.graph.zig_exe,
+        "build-lib",
+        "-fno-emit-bin",
+        "-femit-docs=zig-out/docs",
+        "src/pflag.zig",
+    });
+    const docs_step = b.step("docs", "Generate HTML API documentation into zig-out/docs");
+    docs_step.dependOn(&docs_run.step);
+
     // ── Demo executable ──
     const demo_mod = b.createModule(.{
         .root_source_file = b.path("examples/demo.zig"),

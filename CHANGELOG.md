@@ -8,6 +8,7 @@ All notable changes to zig-pflag will be documented in this file.
 
 - `zig build run-examples` step to run all 12 allocator examples at once
 - Individual `zig build run-<name>` steps for each allocator example (e.g., `run-int_gpa`, `run-string_arena`)
+- `zig build docs` step: HTML API documentation via the compiler's `-femit-docs` bundle (index.html + wasm viewer + sources.tar for every reachable module) written to `zig-out/docs`; opt-in, not part of the CI sequence
 - 98 new tests (110 → 208 total) covering:
   - Complete slice type test suites (int32/int64/uint/float32/float64/bool/int/string_slice/string_array)
   - Error path tests (invalid values, overflow, unknown flags)
