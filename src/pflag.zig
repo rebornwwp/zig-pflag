@@ -40,7 +40,9 @@ pub const ParseErrorsAllowlist = errors.ParseErrorsAllowlist;
 pub const ParseError = errors.ParseError;
 
 // ─── Shared leaf helpers (CSV / bool parsing / key=value) ───
-pub const internal = @import("internal.zig");
+// File-private alias only — the helpers reach the public surface through the
+// *_types.zig re-exports, so `pflag.internal` stays unexported by design.
+const internal = @import("internal.zig");
 
 // ─── Value Interface ───
 // The interface itself lives in value.zig (no dependency on this file), so
@@ -548,8 +550,10 @@ pub fn newFlagSet(gpa: std.mem.Allocator, name: []const u8) FlagSet {
 }
 
 // The process-global CommandLine singleton lives in cmdline.zig; re-exported
-// flat so historical `pflag.boolCL(...)` style calls keep resolving.
-pub const cmdline = @import("cmdline.zig");
+// flat so historical `pflag.boolCL(...)` style calls keep resolving. The
+// module alias itself stays file-private — `pflag.cmdline` is deliberately
+// NOT part of the public surface (no second access path to the singleton).
+const cmdline = @import("cmdline.zig");
 pub const initCommandLine = cmdline.initCommandLine;
 pub const getCommandLine = cmdline.getCommandLine;
 pub const deinitCommandLine = cmdline.deinitCommandLine;
