@@ -443,18 +443,12 @@ pub const FlagSet = struct {
 
     pub fn flagUsagesWrapped(self: *const FlagSet, cols: usize) []const u8 {
         const gpa = self.gpa;
-        var buf: std.ArrayListUnmanaged(u8) = .empty;
-        const Ctx = struct { buf: *std.ArrayListUnmanaged(u8), gpa: std.mem.Allocator };
-        var ctx = Ctx{ .buf = &buf, .gpa = gpa };
+        var allocating = std.Io.Writer.Allocating.init(gpa);
         for (self.ordered_formal.items) |f| {
             if (f.hidden) continue;
-            formatFlagLine(f, cols, struct {
-                fn write(c: *Ctx, s: []const u8) !void {
-                    try c.buf.appendSlice(c.gpa, s);
-                }
-            }.write, &ctx) catch continue;
+            formatFlagLineWriter(f, cols, &allocating.writer) catch continue;
         }
-        return buf.toOwnedSlice(gpa) catch return "?";
+        return allocating.toOwnedSlice() catch return "?";
     }
 
     pub fn parseAll(self: *FlagSet, arguments: []const []const u8, callback: *const fn (*Flag, []const u8) anyerror!void) !void {
@@ -664,81 +658,12 @@ pub const FlagSet = struct {
     }
 };
 
-/// Shared helper: format a single flag line into an ArrayList (for flagUsagesWrapped)
-fn formatFlagLine(
-    f: *const Flag,
-    cols: usize,
-    writeFn: anytype,
-    ctx: anytype,
-) !void {
-    if (f.shorthand.len > 0) {
-        try writeFn(ctx, "  -");
-        try writeFn(ctx, f.shorthand);
-        try writeFn(ctx, ", --");
-        try writeFn(ctx, f.name);
-    } else {
-        try writeFn(ctx, "      --");
-        try writeFn(ctx, f.name);
-    }
-    const hasDefault = !std.mem.eql(u8, f.def_value, "false") and !std.mem.eql(u8, f.def_value, "");
-    const needsDefault = !std.mem.eql(u8, f.no_opt_def_val, "true");
-    if (hasDefault and needsDefault) {
-        try writeFn(ctx, "=");
-        try writeFn(ctx, f.def_value);
-    }
-    if (f.usage.len > 0) {
-        try writeFn(ctx, "\n");
-        if (cols > 0) {
-            try wrapUsageText(f.usage, cols, 8, writeFn, ctx);
-        } else {
-            try writeFn(ctx, "        ");
-            try writeFn(ctx, f.usage);
-        }
-    }
-    if (f.deprecated.len > 0) try writeFn(ctx, " (deprecated)");
-    try writeFn(ctx, "\n");
-}
-
-/// Word-wrap usage text at `cols` boundary with `indent` spaces on continuation lines.
-fn wrapUsageText(
-    usage: []const u8,
-    cols: usize,
-    indent: usize,
-    writeFn: anytype,
-    ctx: anytype,
-) !void {
-    var line_len: usize = 0;
-    var remaining = usage;
-
-    // First line gets indent
-    try writeFn(ctx, "        ");
-    line_len = 8;
-
-    while (remaining.len > 0) {
-        // Skip leading whitespace
-        while (remaining.len > 0 and (remaining[0] == ' ' or remaining[0] == '\t')) {
-            remaining = remaining[1..];
-        }
-        if (remaining.len == 0) break;
-
-        // Find next word boundary
-        const word_end = std.mem.indexOfAny(u8, remaining, " \t\n") orelse remaining.len;
-        const word = remaining[0..word_end];
-
-        if (line_len > 0 and line_len + word.len > cols) {
-            try writeFn(ctx, "\n");
-            var i: usize = 0;
-            while (i < indent) : (i += 1) try writeFn(ctx, " ");
-            line_len = indent;
-        } else if (line_len > indent) {
-            try writeFn(ctx, " ");
-            line_len += 1;
-        }
-
-        try writeFn(ctx, word);
-        line_len += word.len;
-        remaining = remaining[word_end..];
-    }
+/// Whether a flag line should display its default value (`=def`). Omits empty
+/// and "false" defaults, and flags whose no-option default is "true" (bools).
+fn showDefault(f: *const Flag) bool {
+    const has_default = !std.mem.eql(u8, f.def_value, "false") and !std.mem.eql(u8, f.def_value, "");
+    const needs_default = !std.mem.eql(u8, f.no_opt_def_val, "true");
+    return has_default and needs_default;
 }
 
 /// Shared helper: format a single flag line directly to a writer (for printDefaults / defaultUsage)
@@ -748,9 +673,7 @@ fn formatFlagLineWriter(f: *const Flag, cols: usize, w: *std.Io.Writer) !void {
     } else {
         try w.print("      --{s}", .{f.name});
     }
-    const hasDefault = !std.mem.eql(u8, f.def_value, "false") and !std.mem.eql(u8, f.def_value, "");
-    const needsDefault = !std.mem.eql(u8, f.no_opt_def_val, "true");
-    if (hasDefault and needsDefault) try w.print("={s}", .{f.def_value});
+    if (showDefault(f)) try w.print("={s}", .{f.def_value});
     if (f.usage.len > 0) {
         try w.print("\n", .{});
         if (cols > 0) {
