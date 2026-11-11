@@ -200,6 +200,7 @@ zig build run-demo -- \
   -p 9090 \
   --rate=3.14 \
   --name=zig \
+  --workdir=/srv \
   -VVV \
   --timeout=30s \
   -t web -t api -t v2 \
@@ -229,6 +230,8 @@ Flag defaults (before parsing)
         request rate
   -n, --name=world
         your name
+  -w, --workdir=/tmp
+        library-owned string (set() dupes)
   -V, --verbosity=0
         verbosity level
       --timeout=0s
@@ -257,6 +260,7 @@ Parsed values
   port     = 9090
   rate     = 3.14
   name     = zig
+  workdir  = /srv
   verbosity= 3
   timeout  = 30000000000
 
@@ -297,6 +301,7 @@ Flags that were set
   --port (changed=true)
   --rate (changed=true)
   --name (changed=true)
+  --workdir (changed=true)
   --verbosity (changed=true)
   --timeout (changed=true)
   --tag (changed=true)
@@ -308,7 +313,7 @@ Flags that were set
   --header (changed=true)
   --label (changed=true)
 
-  nFlag() = 16, changed(verbose) = true
+  nFlag() = 17, changed(verbose) = true
 
 Flag usages (text)
   -v, --verbose
@@ -323,6 +328,8 @@ Flag usages (text)
         request rate
   -n, --name=world
         your name
+  -w, --workdir=/tmp
+        library-owned string (set() dupes)
   -V, --verbosity=0
         verbosity level
       --timeout=0s

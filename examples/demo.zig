@@ -26,6 +26,9 @@ pub fn main(init: std.process.Init) !void {
     try fs.floatVar(f64, &rate, "rate", 1.0, "request rate");
     var name: []const u8 = "world";
     try fs.stringVarP(&name, "name", "n", "world", "your name");
+    var workdir: []const u8 = "/tmp";
+    var workdir_state = pflag.StringState{ .value = &workdir, .gpa = gpa };
+    try fs.stringStateVarP(&workdir_state, "workdir", "w", "/tmp", "library-owned string (set() dupes)");
     var verbosity: i32 = 0;
     try fs.countVarP(&verbosity, "verbosity", "V", 0, "verbosity level");
     var timeout: i64 = 0;
@@ -96,6 +99,7 @@ pub fn main(init: std.process.Init) !void {
     try show(stdout_writer, "  port     ", port);
     try show(stdout_writer, "  rate     ", rate);
     try p(stdout_writer, "  name     = {s}", .{name});
+    try p(stdout_writer, "  workdir  = {s}", .{workdir});
     try show(stdout_writer, "  verbosity", verbosity);
     try show(stdout_writer, "  timeout  ", timeout);
 
