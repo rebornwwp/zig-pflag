@@ -23,6 +23,8 @@
 comptime {
     if (@import("builtin").is_test) {
         _ = @import("pflag_test.zig");
+        _ = @import("parse_test.zig");
+        _ = @import("usage_test.zig");
         _ = @import("count_types.zig");
     }
 }
