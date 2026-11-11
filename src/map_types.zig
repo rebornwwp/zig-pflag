@@ -1,4 +1,4 @@
-//! Map flag types. Maps from pflag/string_to_*.go v1.0.9.
+//! Map flag types. Maps from pflag/`string_to_*.go` v1.0.9.
 
 const std = @import("std");
 const pflag = @import("pflag.zig");

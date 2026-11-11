@@ -4,14 +4,14 @@
 //! Go pflag's flag.go (upstream keeps these as FlagSet methods; port-side
 //! layering moves them here as free functions taking `*FlagSet`).
 //!
-//! This module may touch FlagSet's non-pub *fields* (_last_error,
-//! _parse_callback, _shorthand_err_buf, actual/ordered_actual, ...) — field
-//! access through the pub container is legal cross-file, and it is
+//! This module may touch FlagSet's non-pub struct fields (`_last_error`,
+//! `_parse_callback`, `_shorthand_err_buf`, `actual`/`ordered_actual`, ...) —
+//! field access through the pub container is legal cross-file, and it is
 //! deliberate: parse.zig is the engine room, pflag.zig the registry.
-//! Non-pub *methods* are NOT reachable across files in Zig 0.17 (lazy
+//! Non-pub methods are NOT reachable across files in Zig 0.17 (lazy
 //! analysis hid this from probes), so the only bookkeeping the engine needs
-//! (markParsed) lives here; the public surface (parse/parseAll shells,
-//! lastError, printUsage) stays in FlagSet.
+//! (`markParsed`) lives here; the public surface (`parse`/`parseAll`
+//! shells, `lastError`, `printUsage`) stays in FlagSet.
 
 const std = @import("std");
 const Flag = @import("pflag.zig").Flag;

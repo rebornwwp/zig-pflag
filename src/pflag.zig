@@ -1,22 +1,24 @@
-//! pflag — POSIX/GNU-style --flags for Zig.
-//! Port of Go's spf13/pflag v1.0.9 to Zig 0.16.0.
+//! pflag — POSIX/GNU-style `--flags` for Zig.
 //!
-//! File layout mirrors Go pflag structure:
-//!   value.zig        — Value interface (ptr + vtable)
-//!   internal.zig     — shared leaf helpers (CSV, bool parse, key=value)
-//!   usage.zig        — usage/help line rendering + word wrap
-//!   parse.zig        — argument parsing engine (argLoop/longArg/shortArg)
-//!   cmdline.zig      — global CommandLine singleton (*CL helpers)
-//!   pflag.zig        — Flag, FlagSet, parse logic
-//!   errors.zig       — Error types
-//!   bool_types.zig   — Bool flag type
-//!   int_types.zig    — Int flag types (comptime-generic)
-//!   float_types.zig  — Float flag types (comptime-generic)
-//!   string_types.zig — String flag type
-//!   count_types.zig  — Count flag type
-//!   duration_types.zig — Duration flag type
-//!   slice_types.zig  — String/Int slice types
-//!   map_types.zig    — String→Int / String→String map types
+//! A port of Go's [spf13/pflag](https://github.com/spf13/pflag) v1.0.9 to
+//! Zig 0.17.0: pure Zig, no C dependencies, no runtime services.
+//!
+//! ## File layout
+//!
+//! Upstream lives mostly in one 1.4k-line `flag.go`; this port layers by
+//! dependency direction *beyond* upstream on purpose, while keeping the
+//! public API frozen: everything user-facing is re-exported FLAT from this
+//! module (no namespace tables like `pflag.bool_types` are published).
+//!
+//! - `value.zig` — the `Value` interface (ptr + vtable)
+//! - `internal.zig` — shared leaf helpers (CSV, bool parsing, key=value)
+//! - `usage.zig` — usage/help line rendering + word wrap
+//! - `parse.zig` — argument parsing engine (`argLoop`/`longArg`/`shortArg`)
+//! - `cmdline.zig` — process-global CommandLine singleton (`*CL` helpers)
+//! - `pflag.zig` — `Flag`, `FlagSet`, registration, parse entry shells
+//! - `errors.zig` — error types (`ParseError`, `ErrorHandling`, allowlist)
+//! - `*_types.zig` — one file per concrete `Value` implementation, all
+//!   comptime-generic where a family of widths exists (int/uint/float/slice/map)
 
 // When building tests, pull in pflag_test.zig so its test blocks are collected.
 // builtin.is_test is true only when compiling via `zig test`.

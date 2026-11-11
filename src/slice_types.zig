@@ -1,4 +1,4 @@
-//! Slice flag types. Maps from pflag/*_slice.go, string_array.go v1.0.9.
+//! Slice flag types. Maps from pflag/`*_slice.go`, string_array.go v1.0.9.
 
 const std = @import("std");
 const pflag = @import("pflag.zig");
