@@ -2,6 +2,7 @@
 
 const std = @import("std");
 const pflag = @import("pflag.zig");
+const internal = @import("internal.zig");
 const Value = @import("value.zig").Value;
 
 // ─── String → Int (comptime-generic: i8-i64, u8-u64) ───
@@ -33,13 +34,10 @@ fn strToIntVtableGen(comptime T: type) Value.VTable {
                 const gpa = state.gpa;
                 var it = std.mem.splitScalar(u8, v, ',');
                 while (it.next()) |pair| {
-                    const trimmed = std.mem.trim(u8, pair, " \t");
-                    if (trimmed.len == 0) continue;
-                    const eq = std.mem.indexOfScalar(u8, trimmed, '=') orelse return error.ExpectedKeyValue;
-                    const key = try gpa.dupe(u8, trimmed[0..eq]);
+                    const kv = try internal.splitKeyValue(pair) orelse continue;
+                    const key = try gpa.dupe(u8, kv.key);
                     errdefer gpa.free(key);
-                    const val_str = trimmed[eq + 1 ..];
-                    const val = try std.fmt.parseInt(T, val_str, 0);
+                    const val = try std.fmt.parseInt(T, kv.val, 0);
                     if (!state.changed) {
                         // First Set: defaults may have literal (non-owned) keys,
                         // so do NOT free them — just clear the backing storage.
@@ -140,12 +138,10 @@ const strToStrVtable = Value.VTable{
             // Support comma-separated key=value pairs: "a=1,b=2"
             var it = std.mem.splitScalar(u8, v, ',');
             while (it.next()) |pair| {
-                const trimmed = std.mem.trim(u8, pair, " \t");
-                if (trimmed.len == 0) continue;
-                const eq = std.mem.indexOfScalar(u8, trimmed, '=') orelse return error.ExpectedKeyValue;
-                const key = try gpa.dupe(u8, trimmed[0..eq]);
+                const kv = try internal.splitKeyValue(pair) orelse continue;
+                const key = try gpa.dupe(u8, kv.key);
                 errdefer gpa.free(key);
-                const val = try gpa.dupe(u8, trimmed[eq + 1 ..]);
+                const val = try gpa.dupe(u8, kv.val);
                 // val needs its own errdefer: if map.put() below fails,
                 // ownership never transfers and val would leak.
                 errdefer gpa.free(val);

@@ -2,7 +2,7 @@
 
 const std = @import("std");
 const pflag = @import("pflag.zig");
-const bool_types = @import("bool_types.zig");
+const internal = @import("internal.zig");
 const Value = @import("value.zig").Value;
 
 // ─── Generic Slice State ───
@@ -39,92 +39,10 @@ pub const StringSliceState = struct {
     changed: bool = false,
 };
 
-/// Parse CSV-formatted string into array of strings.
-/// Matches Go's csv.NewReader behavior:
-/// - Quoted fields: "one,two" → one,two
-/// - Escaped quotes: "" → "
-pub fn readAsCSV(gpa: std.mem.Allocator, val: []const u8) ![]const []const u8 {
-    if (val.len == 0) return &.{};
-
-    var result: std.ArrayListUnmanaged([]const u8) = .empty;
-    errdefer {
-        for (result.items) |s| gpa.free(s);
-        result.deinit(gpa);
-    }
-
-    var i: usize = 0;
-    while (i < val.len) {
-        var field: std.ArrayListUnmanaged(u8) = .empty;
-        defer field.deinit(gpa);
-
-        if (val[i] == '"') {
-            // Quoted field
-            i += 1; // skip opening quote
-            while (i < val.len) {
-                if (val[i] == '"') {
-                    if (i + 1 < val.len and val[i + 1] == '"') {
-                        // Escaped quote
-                        try field.append(gpa, '"');
-                        i += 2;
-                    } else {
-                        // End of quoted field
-                        i += 1; // skip closing quote
-                        break;
-                    }
-                } else {
-                    try field.append(gpa, val[i]);
-                    i += 1;
-                }
-            }
-            // Skip to comma or end
-            while (i < val.len and val[i] != ',') i += 1;
-            if (i < val.len) i += 1; // skip comma
-        } else {
-            // Unquoted field
-            while (i < val.len and val[i] != ',') {
-                try field.append(gpa, val[i]);
-                i += 1;
-            }
-            if (i < val.len) i += 1; // skip comma
-        }
-
-        const item = try gpa.dupe(u8, field.items);
-        result.append(gpa, item) catch |err| {
-            gpa.free(item);
-            return err;
-        };
-    }
-
-    return try result.toOwnedSlice(gpa);
-}
-
-/// Write array of strings as CSV format.
-/// Matches Go's csv.Writer behavior.
-pub fn writeAsCSV(gpa: std.mem.Allocator, vals: []const []const u8) ![]const u8 {
-    var buf: std.ArrayListUnmanaged(u8) = .empty;
-    errdefer buf.deinit(gpa);
-
-    for (vals, 0..) |s, i| {
-        if (i > 0) try buf.appendSlice(gpa, ",");
-        // Quote if contains comma, quote, or newline
-        const needs_quote = std.mem.indexOfAny(u8, s, ",\"\n") != null;
-        if (needs_quote) {
-            try buf.appendSlice(gpa, "\"");
-            for (s) |c| {
-                if (c == '"') {
-                    try buf.appendSlice(gpa, "\"\"");
-                } else {
-                    try buf.append(gpa, c);
-                }
-            }
-            try buf.appendSlice(gpa, "\"");
-        } else {
-            try buf.appendSlice(gpa, s);
-        }
-    }
-
-    return try buf.toOwnedSlice(gpa);
-}
+/// Re-exported from internal.zig so `pflag.slice_types.readAsCSV` (and the
+/// local call sites below) stay valid; upstream keeps these in string_slice.go.
+pub const readAsCSV = @import("internal.zig").readAsCSV;
+pub const writeAsCSV = @import("internal.zig").writeAsCSV;
 
 const stringSliceVtable = Value.VTable{
     .set = struct {
@@ -401,7 +319,7 @@ const boolSliceVtable = Value.VTable{
             }
             for (parsed) |bool_str| {
                 const trimmed = std.mem.trim(u8, bool_str, " \t");
-                const b = try bool_types.parseBool(trimmed);
+                const b = try internal.parseBool(trimmed);
                 try state.value.append(gpa, b);
             }
         }

@@ -3,6 +3,7 @@
 //!
 //! File layout mirrors Go pflag structure:
 //!   value.zig        — Value interface (ptr + vtable)
+//!   internal.zig     — shared leaf helpers (CSV, bool parse, key=value)
 //!   pflag.zig        — Flag, FlagSet, parse logic
 //!   errors.zig       — Error types
 //!   bool_types.zig   — Bool flag type
@@ -30,6 +31,9 @@ pub const errors = @import("errors.zig");
 pub const ErrorHandling = errors.ErrorHandling;
 pub const ParseErrorsAllowlist = errors.ParseErrorsAllowlist;
 pub const ParseError = errors.ParseError;
+
+// ─── Shared leaf helpers (CSV / bool parsing / key=value) ───
+pub const internal = @import("internal.zig");
 
 // ─── Value Interface ───
 // The interface itself lives in value.zig (no dependency on this file), so
