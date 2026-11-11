@@ -4,6 +4,7 @@
 //! File layout mirrors Go pflag structure:
 //!   value.zig        — Value interface (ptr + vtable)
 //!   internal.zig     — shared leaf helpers (CSV, bool parse, key=value)
+//!   usage.zig        — usage/help line rendering + word wrap
 //!   pflag.zig        — Flag, FlagSet, parse logic
 //!   errors.zig       — Error types
 //!   bool_types.zig   — Bool flag type
@@ -25,6 +26,7 @@ comptime {
 }
 
 const std = @import("std");
+const usage_fmt = @import("usage.zig");
 
 // ─── Error types ───
 pub const errors = @import("errors.zig");
@@ -450,7 +452,7 @@ pub const FlagSet = struct {
         var allocating = std.Io.Writer.Allocating.init(gpa);
         for (self.ordered_formal.items) |f| {
             if (f.hidden) continue;
-            formatFlagLineWriter(f, cols, &allocating.writer) catch continue;
+            usage_fmt.formatFlag(f, cols, &allocating.writer) catch continue;
         }
         return allocating.toOwnedSlice() catch return "?";
     }
@@ -657,77 +659,10 @@ pub const FlagSet = struct {
         const w = self.out_writer.?;
         for (self.ordered_formal.items) |f| {
             if (f.hidden) continue;
-            formatFlagLineWriter(f, 0, w) catch return;
+            usage_fmt.formatFlag(f, 0, w) catch return;
         }
     }
 };
-
-/// Whether a flag line should display its default value (`=def`). Omits empty
-/// and "false" defaults, and flags whose no-option default is "true" (bools).
-fn showDefault(f: *const Flag) bool {
-    const has_default = !std.mem.eql(u8, f.def_value, "false") and !std.mem.eql(u8, f.def_value, "");
-    const needs_default = !std.mem.eql(u8, f.no_opt_def_val, "true");
-    return has_default and needs_default;
-}
-
-/// Shared helper: format a single flag line directly to a writer (for printDefaults / defaultUsage)
-fn formatFlagLineWriter(f: *const Flag, cols: usize, w: *std.Io.Writer) !void {
-    if (f.shorthand.len > 0) {
-        try w.print("  -{s}, --{s}", .{ f.shorthand, f.name });
-    } else {
-        try w.print("      --{s}", .{f.name});
-    }
-    if (showDefault(f)) try w.print("={s}", .{f.def_value});
-    if (f.usage.len > 0) {
-        try w.print("\n", .{});
-        if (cols > 0) {
-            try wrapUsageTextWriter(f.usage, cols, 8, w);
-        } else {
-            try w.print("        {s}", .{f.usage});
-        }
-    }
-    if (f.deprecated.len > 0) try w.print(" (deprecated: {s})", .{f.deprecated});
-    try w.print("\n", .{});
-}
-
-/// Word-wrap usage text to a std.Io.Writer at `cols` boundary.
-fn wrapUsageTextWriter(
-    usage: []const u8,
-    cols: usize,
-    indent: usize,
-    w: *std.Io.Writer,
-) !void {
-    var line_len: usize = 0;
-    var remaining = usage;
-
-    // First line gets indent
-    try w.print("        ", .{});
-    line_len = 8;
-
-    while (remaining.len > 0) {
-        while (remaining.len > 0 and (remaining[0] == ' ' or remaining[0] == '\t')) {
-            remaining = remaining[1..];
-        }
-        if (remaining.len == 0) break;
-
-        const word_end = std.mem.indexOfAny(u8, remaining, " \t\n") orelse remaining.len;
-        const word = remaining[0..word_end];
-
-        if (line_len > 0 and line_len + word.len > cols) {
-            try w.print("\n", .{});
-            var i: usize = 0;
-            while (i < indent) : (i += 1) try w.print(" ", .{});
-            line_len = indent;
-        } else if (line_len > indent) {
-            try w.print(" ", .{});
-            line_len += 1;
-        }
-
-        try w.print("{s}", .{word});
-        line_len += word.len;
-        remaining = remaining[word_end..];
-    }
-}
 
 fn defaultUsage(fs: *FlagSet) void {
     if (fs.out_writer == null) return;
@@ -735,7 +670,7 @@ fn defaultUsage(fs: *FlagSet) void {
     w.print("Usage of {s}:\n", .{fs.name}) catch return;
     for (fs.ordered_formal.items) |f| {
         if (f.hidden) continue;
-        formatFlagLineWriter(f, 0, w) catch return;
+        usage_fmt.formatFlag(f, 0, w) catch return;
     }
 }
 
