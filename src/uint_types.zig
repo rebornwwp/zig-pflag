@@ -3,7 +3,7 @@
 
 const std = @import("std");
 const pflag = @import("pflag.zig");
-const Value = pflag.Value;
+const Value = @import("value.zig").Value;
 
 const u8Vtable = makeUintVtable(u8);
 const u16Vtable = makeUintVtable(u16);

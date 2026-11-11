@@ -2,7 +2,7 @@
 
 const std = @import("std");
 const pflag = @import("pflag.zig");
-const Value = pflag.Value;
+const Value = @import("value.zig").Value;
 
 /// Wrapper struct to track allocator for string values.
 /// Ensures set() duplicates the input so it doesn't dangle.

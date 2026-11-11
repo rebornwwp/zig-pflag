@@ -22,6 +22,7 @@ All notable changes to zig-pflag will be documented in this file.
 - `std.fmt.allocPrint(gpa, ...)` replaced with `gpa.print(...)` (moved to `std.mem.Allocator` in Zig 0.17)
 - `gpa` examples migrated from deprecated `std.heap.DebugAllocator` to thread-safe `std.heap.SafeAllocator`
 - `build.zig.zon`: `minimum_zig_version` bumped to `0.17.0`
+- Internal refactor: the `Value` interface (`ptr` + `VTable`) moved from `src/pflag.zig` into a new `src/value.zig`. The nine `*_types.zig` files now import the interface directly, removing the `pflag.zig ⇄ *_types.zig` import cycles. Public API is unchanged — `Value` is still re-exported as `pflag.Value`
 
 ## [0.1.0] - 2026-05-24
 

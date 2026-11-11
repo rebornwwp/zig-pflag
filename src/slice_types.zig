@@ -3,7 +3,7 @@
 const std = @import("std");
 const pflag = @import("pflag.zig");
 const bool_types = @import("bool_types.zig");
-const Value = pflag.Value;
+const Value = @import("value.zig").Value;
 
 // ─── Generic Slice State ───
 

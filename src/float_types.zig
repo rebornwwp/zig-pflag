@@ -2,7 +2,7 @@
 
 const std = @import("std");
 const pflag = @import("pflag.zig");
-const Value = pflag.Value;
+const Value = @import("value.zig").Value;
 
 const f32Vtable = makeFloatVtable(f32);
 const f64Vtable = makeFloatVtable(f64);

@@ -40,14 +40,15 @@ zig test --dep pflag -Mroot=src/pflag.zig -Mpflag=src/pflag.zig
 
 文件布局镜像 Go pflag:
 
-- `src/pflag.zig`(~770 行):全部核心 —— `Value` 接口(ptr + vtable)、`Flag`、`FlagSet`、`--long`/`-s` 解析引擎(`parseArgLoop`)、usage 格式化。其余文件都是 `Value` 的具体实现。
+- `src/value.zig`(~35 行):`Value` 接口本体(ptr + vtable,四个方法 `set`/`string`/`typeName`/`deinit`)。只依赖 `std`,不 import 本仓库任何其他文件,所以 9 个 `*_types.zig` 直接 `const Value = @import("value.zig").Value;` 而不会和 `pflag.zig` 绕成循环。
+- `src/pflag.zig`(~860 行):核心 —— `Flag`、`FlagSet`、`--long`/`-s` 解析引擎(`parseArgLoop`)、usage 格式化,并以 `pub const Value = @import("value.zig").Value` re-export 接口(外部 API 仍是 `pflag.Value`)。**不要**写成 `pub const value = @import("value.zig")`:本文件里函数参数名 `value` 铺天盖地,Zig 0.17 会报 "function parameter shadows declaration of 'value'"(~40 个错误)。其余文件都是 `Value` 的具体实现。
 - `src/*_types.zig`(9 个):每种 flag 类型一个文件,暴露 `xxxValue(...)` 构造函数,全部 comptime 泛型(`intVar(T)` 等)。
 - `src/pflag_test.zig`:核心 FlagSet 测试(92 个)。类型特定测试分散在各自的 `*_types.zig` 文件中。新增 flag 类型的测试应加在对应的类型文件中。
 - `examples/`:`demo.zig`(14 个文件之一,由 `zig build` 编译)、`struct_config.zig`,以及"3 类型(int/string/floatSlice)× 5 分配器(GPA/Arena/Page/FBA/c_allocator)"矩阵。改分配器相关代码时矩阵里的五个都要能编译。
 
 ### 加一种新 flag 类型
 
-1. 建 `src/<name>_types.zig`,实现 `Value` vtable 四个方法:`set`、`string`、`typeName`、`deinit`。
+1. 建 `src/<name>_types.zig`,`const Value = @import("value.zig").Value;`,实现 `Value` vtable 四个方法:`set`、`string`、`typeName`、`deinit`。
 2. 在 `src/pflag.zig` 里 `pub const xxx_types = @import(...)` 并 re-export。
 3. 加 `FlagSet.xxxVar` / `xxxVarP` 两个构造方法。
 4. `typeName()` 返回值会被 `getBool`/`getInt` 等 getter 用 `std.mem.eql` 做字符串比较,必须精确。

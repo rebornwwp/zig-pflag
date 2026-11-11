@@ -2,7 +2,8 @@
 //! Port of Go's spf13/pflag v1.0.9 to Zig 0.16.0.
 //!
 //! File layout mirrors Go pflag structure:
-//!   pflag.zig        — Value, Flag, FlagSet, parse logic
+//!   value.zig        — Value interface (ptr + vtable)
+//!   pflag.zig        — Flag, FlagSet, parse logic
 //!   errors.zig       — Error types
 //!   bool_types.zig   — Bool flag type
 //!   int_types.zig    — Int flag types (comptime-generic)
@@ -31,31 +32,11 @@ pub const ParseErrorsAllowlist = errors.ParseErrorsAllowlist;
 pub const ParseError = errors.ParseError;
 
 // ─── Value Interface ───
+// The interface itself lives in value.zig (no dependency on this file), so
+// concrete types in *_types.zig can import it without a cycle. Re-exported
+// here as `pflag.Value` for API compatibility.
 
-pub const Value = struct {
-    ptr: *anyopaque,
-    vtable: *const VTable,
-
-    pub const VTable = struct {
-        set: *const fn (ptr: *anyopaque, val: []const u8) anyerror!void,
-        string: *const fn (ptr: *anyopaque, gpa: std.mem.Allocator) anyerror![]const u8,
-        typeName: *const fn () []const u8,
-        deinit: *const fn (ptr: *anyopaque, gpa: std.mem.Allocator) void,
-    };
-
-    pub fn set(self: Value, val: []const u8) anyerror!void {
-        return self.vtable.set(self.ptr, val);
-    }
-    pub fn string(self: Value, gpa: std.mem.Allocator) anyerror![]const u8 {
-        return self.vtable.string(self.ptr, gpa);
-    }
-    pub fn typeName(self: Value) []const u8 {
-        return self.vtable.typeName();
-    }
-    pub fn deinit(self: Value, gpa: std.mem.Allocator) void {
-        return self.vtable.deinit(self.ptr, gpa);
-    }
-};
+pub const Value = @import("value.zig").Value;
 
 // ─── Built-in Value Types ───
 

@@ -418,7 +418,8 @@ zig build build-examples
 
 ```
 src/
-├── pflag.zig          # Value, Flag, FlagSet, parse engine
+├── value.zig          # Value interface (ptr + vtable dispatch)
+├── pflag.zig          # Flag, FlagSet, parse engine
 ├── errors.zig         # ParseError, ErrorHandling
 ├── bool_types.zig     # Bool flag type
 ├── int_types.zig      # Int types (i8–i64, comptime-generic)
