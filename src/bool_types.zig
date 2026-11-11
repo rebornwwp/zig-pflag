@@ -46,6 +46,8 @@ test "BoolVar" {
     const testCases = [_]TestCase{
         .{ .input = &.{"--verbose"}, .expected = true },
         .{ .input = &.{"-v"}, .expected = true },
+        .{ .input = &.{"-v=false"}, .expected = false }, // '=' strip beats NoOptDefVal
+        .{ .input = &.{"-v=true"}, .expected = true }, // explicit form wins too
         .{ .input = &.{"--verbose=true"}, .expected = true },
         .{ .input = &.{"--verbose=false"}, .expected = false },
         .{ .input = &.{"--verbose=1"}, .expected = true },

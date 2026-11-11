@@ -25,6 +25,10 @@ All notable changes to zig-pflag will be documented in this file.
   - `count_types.zig`: explicit negative/hex/plus values, `=N`-then-bare increment composition, typeName assertion
   - `duration_types.zig`: negative/plus/zero values, malformed-input taxonomy (`InvalidDuration` vs `InvalidCharacter` vs parse-stage `Overflow`)
   - `slice_types.zig`: radix-0/underscore/negative/exponent elements in int/uint/float slice sets
+- Round-two coverage of the parse-form matrix (suite 209 → 210; the only behavior edit is the slice atomicity fix listed under Changed):
+  - `slice_types.zig`: new error-path test — a bad/overflowing element goes through `FlagSet.parse` and surfaces the scalar error kinds (`InvalidCharacter`/`Overflow`/`InvalidBoolValue`) for all four of int/uint/float/bool slices, with assertions that the slice partially populated by a failed parse stays untouched (defaults and previously parsed values) and that the first-Set-replaces `changed` state survives a failure; empty fields in `a,,b` still skip
+  - `bool_types.zig`: the `BoolVar` table gains shorthand-with-equals spellings (`-v=false`/`-v=true`) — the `=` strip runs BEFORE `NoOptDefVal`, so bare `-v` is true while `-v=false` is false (matches Go)
+  - `parse_test.zig`: the invalid-argument paths now assert the concrete error kind through `fs.parse` (f32 and f64 → `InvalidCharacter`) instead of bare `catch {}`
 
 ### Changed
 
@@ -43,6 +47,7 @@ All notable changes to zig-pflag will be documented in this file.
   - int/uint/float slice vtables now share `makeNumSliceVtable(T, comptime parse)`; behavior unchanged (the 205-test suite stayed green throughout, zero test edits)
   - `src/pflag_test.zig` split by concern: parse-engine tests → `parse_test.zig` (42), usage-rendering tests → `usage_test.zig` (28), shared helpers → `testutil.zig`, core registry/getter tests stay in `pflag_test.zig` (46)
 - **User-visible text change in usage output** (result of unifying the duplicated render stacks, worth calling out despite living under "internal"): `FlagUsages`/`FlagUsagesWrapped` now render deprecated flags as `" (deprecated: msg)"`, matching `PrintDefaults`; previously the string-returning path emitted only `" (deprecated)"` with no message. If you diff help text or snapshot it, this line changes.
+- **Numeric/bool slices now commit atomically on a failed element** (upstream-parity fix): `intSlice`/`uintSlice`/`floatSlice` (via `makeNumSliceVtable`) and `boolSlice` used to clear defaults (first Set) and append already-converted elements *before* a later bad element errored, so a failing `Set` could leave the bound slice half-populated and consume the replace-defaults state. They now build the parsed list in a local buffer first, like upstream: on error nothing commits, `changed` stays unset, and defaults or previously parsed values survive. (`-0` still parses to zero in uint slices, and real negatives yield `Overflow`, matching the scalar widths via Zig's radix-0 `parseInt`.)
 
 ## [0.1.0] - 2026-05-24
 

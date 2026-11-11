@@ -187,19 +187,25 @@ fn makeNumSliceVtable(
         .set = struct {
             fn set(ptr: *anyopaque, v: []const u8) !void {
                 const state: *SliceState(T) = @ptrCast(@alignCast(ptr));
+                // Parse the whole list into a temporary buffer BEFORE touching
+                // the committed slice or the `changed` flag (upstream builds a
+                // local `out []int`): a bad element mid-list must leave
+                // previously-parsed values and untouched defaults intact.
+                var out: std.ArrayListUnmanaged(T) = .empty;
+                defer out.deinit(state.gpa);
+                var it = std.mem.splitScalar(u8, v, ',');
+                while (it.next()) |part| {
+                    const trimmed = std.mem.trim(u8, part, " \t");
+                    if (trimmed.len > 0) {
+                        try out.append(state.gpa, try parse(T, trimmed));
+                    }
+                }
                 // First Set replaces defaults; subsequent Sets append (matches Go)
                 if (!state.changed) {
                     state.value.clearRetainingCapacity();
                     state.changed = true;
                 }
-                // Split by comma and parse each value
-                var it = std.mem.splitScalar(u8, v, ',');
-                while (it.next()) |part| {
-                    const trimmed = std.mem.trim(u8, part, " \t");
-                    if (trimmed.len > 0) {
-                        try state.value.append(state.gpa, try parse(T, trimmed));
-                    }
-                }
+                try state.value.appendSlice(state.gpa, out.items);
             }
         }.set,
         .string = struct {
@@ -295,16 +301,20 @@ const boolSliceVtable = Value.VTable{
             }
 
             // Parse boolean values into slice
+            // Parse the whole list locally first (upstream matches): a bad
+            // element must leave the committed slice untouched.
+            var out: std.ArrayListUnmanaged(bool) = .empty;
+            defer out.deinit(gpa);
+            for (parsed) |bool_str| {
+                const trimmed = std.mem.trim(u8, bool_str, " \t");
+                try out.append(gpa, try internal.parseBool(trimmed));
+            }
             // First Set replaces defaults; subsequent Sets append (matches Go)
             if (!state.changed) {
                 state.value.clearRetainingCapacity();
                 state.changed = true;
             }
-            for (parsed) |bool_str| {
-                const trimmed = std.mem.trim(u8, bool_str, " \t");
-                const b = try internal.parseBool(trimmed);
-                try state.value.append(gpa, b);
-            }
+            try state.value.appendSlice(gpa, out.items);
         }
     }.set,
     .string = struct {
@@ -1144,6 +1154,82 @@ test "StringToInt WithDefault - parses value overriding defaults" {
     try std.testing.expectEqual(@as(u32, 2), map.count());
     try std.testing.expectEqual(@as(i32, 3), map.get("a").?);
     try std.testing.expectEqual(@as(i32, 4), map.get("b").?);
+}
+
+test "numeric slices parse errors and state preservation" {
+    // Gap 1: a failing element must surface the vtable error type through
+    // fs.parse (continue_on_error, no process exit) AND leave the committed
+    // slice untouched — both previously parsed values and untouched defaults
+    // (makeNumSliceVtable/boolSlice now build the parsed list locally first).
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    fs.error_handling = .continue_on_error;
+
+    var i32s: std.ArrayListUnmanaged(i32) = .empty;
+    var i32_state = pflag.SliceState(i32){ .value = &i32s, .gpa = std.testing.allocator };
+    try fs.intSliceVar(i32, &i32_state, "num", &.{}, "");
+
+    var i64s: std.ArrayListUnmanaged(i64) = .empty;
+    var i64_state = pflag.SliceState(i64){ .value = &i64s, .gpa = std.testing.allocator };
+    try fs.intSliceVar(i64, &i64_state, "big", &.{ 7, 8 }, "");
+
+    var u32s: std.ArrayListUnmanaged(u32) = .empty;
+    var u32_state = pflag.SliceState(u32){ .value = &u32s, .gpa = std.testing.allocator };
+    try fs.uintSliceVar(u32, &u32_state, "nums", &.{}, "");
+
+    var f64s: std.ArrayListUnmanaged(f64) = .empty;
+    var f64_state = pflag.SliceState(f64){ .value = &f64s, .gpa = std.testing.allocator };
+    try fs.floatSliceVar(f64, &f64_state, "vals", &.{}, "");
+
+    var bools: std.ArrayListUnmanaged(bool) = .empty;
+    var bool_state = pflag.SliceState(bool){ .value = &bools, .gpa = std.testing.allocator };
+    try fs.boolSliceVar(&bool_state, "on", &.{}, "");
+
+    // bad element after a good one: same error type as the scalar path,
+    // nothing committed, flag not marked changed (default replacement deferred)
+    try std.testing.expectError(error.InvalidCharacter, fs.parse(&.{"--num=1,x"}));
+    try std.testing.expectEqual(@as(usize, 0), i32s.items.len);
+    var flag = fs.lookup("num").?;
+    try std.testing.expect(!flag.changed);
+    // a clean parse afterward still works: first Set replaces defaults
+    try fs.parse(&.{"--num=1"});
+    try std.testing.expect(flag.changed);
+    try std.testing.expectEqual(@as(usize, 1), i32s.items.len);
+    // failure AFTER success keeps the previously committed values
+    try std.testing.expectError(error.InvalidCharacter, fs.parse(&.{"--num=2,3,bad"}));
+    try std.testing.expectEqual(@as(usize, 1), i32s.items.len);
+    try std.testing.expectEqual(@as(i32, 1), i32s.items[0]);
+
+    // width overflow surfaces as Overflow (not InvalidCharacter); the
+    // untouched defaults of another flag survive the failed parse
+    try std.testing.expectError(error.Overflow, fs.parse(&.{"--big=9223372036854775808,7"}));
+    flag = fs.lookup("big").?;
+    try std.testing.expect(!flag.changed);
+    try std.testing.expectEqual(@as(usize, 2), i64s.items.len);
+    try std.testing.expectEqual(@as(i64, 7), i64s.items[0]);
+    try std.testing.expectEqual(@as(i64, 8), i64s.items[1]);
+
+    // uint slices: "-0" lands on zero (Zig radix-0 + Go ParseUint agree), but
+    // a real negative is Overflow (same convention as the scalar widths).
+    try fs.parse(&.{"--nums=-0"});
+    try std.testing.expectEqual(@as(usize, 1), u32s.items.len);
+    try std.testing.expectEqual(@as(u32, 0), u32s.items[0]);
+    try std.testing.expectError(error.Overflow, fs.parse(&.{"--nums=-3"}));
+    try std.testing.expectEqual(@as(usize, 1), u32s.items.len); // failed element not appended
+    try std.testing.expectEqual(@as(u32, 0), u32s.items[0]);
+
+    // float slice elements: bad token is InvalidCharacter
+    try std.testing.expectError(error.InvalidCharacter, fs.parse(&.{"--vals=1.5,zz"}));
+    try std.testing.expectEqual(@as(usize, 0), f64s.items.len);
+
+    // bool slice elements go through parseBool: InvalidBoolValue
+    try std.testing.expectError(error.InvalidBoolValue, fs.parse(&.{"--on=t,x"}));
+    try std.testing.expectEqual(@as(usize, 0), bools.items.len);
+
+    // empty fields between commas are skipped
+    try fs.parse(&.{"--num=2,,3"});
+    try std.testing.expectEqual(@as(usize, 3), i32s.items.len);
+    try std.testing.expectEqual(@as(i32, 3), i32s.items[2]);
 }
 
 // ── Allocation-failure tests ──

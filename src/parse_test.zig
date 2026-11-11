@@ -620,9 +620,13 @@ test "Invalid argument returns error - float" {
     fs.error_handling = .continue_on_error;
     var v: f64 = 0;
     try fs.floatVar(f64, &v, "float64", 0, "");
-    // Parse should fail - just verify value is unchanged
-    fs.parse(&.{"--float64=x"}) catch {};
+    try testing.expectError(error.InvalidCharacter, fs.parse(&.{"--float64=x"}));
     try testing.expectApproxEqAbs(@as(f64, 0), v, 0.001); // value unchanged
+
+    var v32: f32 = 0;
+    try fs.floatVar(f32, &v32, "float32", 0, "");
+    try testing.expectError(error.InvalidCharacter, fs.parse(&.{"--float32=x"}));
+    try testing.expectApproxEqAbs(@as(f32, 0), v32, 0.001); // value unchanged
 }
 
 test "Unknown shorthand flag returns error" {
