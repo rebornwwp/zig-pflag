@@ -53,15 +53,18 @@ pub const readAsCSV = internal.readAsCSV;
 pub const writeAsCSV = internal.writeAsCSV;
 
 // ─── Value Interface ───
-// The interface itself lives in value.zig (no dependency on this file), so
-// concrete types in *_types.zig can import it without a cycle. Re-exported
-// here as `pflag.Value` for API compatibility.
+// Lives in value.zig and stays FILE-PRIVATE from this module: the extension
+// mechanism (custom vtable + varP) is an upstream-Go affordance this port
+// deliberately does not publish — new flag types are contributed as *_types
+// files (see AGENTS.md checklist), which import value.zig directly.
+// `Flag.value` / the ctors below remain usable anonymously by callers.
 
-pub const Value = @import("value.zig").Value;
+const Value = @import("value.zig").Value;
 
 // ─── Built-in Value Types ───
-// Implementation modules stay file-private; every user-facing symbol is
-// flat-re-exported below (ctors + State structs).
+// Implementation modules AND their ctors are file-private now: registering
+// goes exclusively through the FlagSet.xxxVar/xxxVarP methods below; the
+// State structs stay public because callers must construct them.
 
 const bool_types = @import("bool_types.zig");
 const int_types = @import("int_types.zig");
@@ -73,35 +76,36 @@ const duration_types = @import("duration_types.zig");
 const slice_types = @import("slice_types.zig");
 const map_types = @import("map_types.zig");
 
-pub const boolValue = bool_types.boolValue;
-pub const intValue = int_types.intValue;
-pub const uintValue = uint_types.uintValue;
-pub const floatValue = float_types.floatValue;
-pub const stringValue = string_types.stringValue;
-pub const stringStateValue = string_types.stringStateValue;
+const boolValue = bool_types.boolValue;
+const intValue = int_types.intValue;
+const uintValue = uint_types.uintValue;
+const floatValue = float_types.floatValue;
+const stringValue = string_types.stringValue;
+const stringStateValue = string_types.stringStateValue;
 pub const StringState = string_types.StringState;
-pub const countValue = count_types.countValue;
-pub const durationValue = duration_types.durationValue;
+const countValue = count_types.countValue;
+const durationValue = duration_types.durationValue;
 pub const parseDuration = duration_types.parseDuration;
 pub const formatDuration = duration_types.formatDuration;
-pub const stringSliceValue = slice_types.stringSliceValue;
+const stringSliceValue = slice_types.stringSliceValue;
 pub const StringSliceState = slice_types.StringSliceState;
-pub const stringArrayValue = slice_types.stringArrayValue;
+const stringArrayValue = slice_types.stringArrayValue;
 pub const StringArrayState = slice_types.StringArrayState;
-pub const intSliceValue = slice_types.intSliceValue;
-pub const uintSliceValue = slice_types.uintSliceValue;
-pub const boolSliceValue = slice_types.boolSliceValue;
-pub const floatSliceValue = slice_types.floatSliceValue;
+const intSliceValue = slice_types.intSliceValue;
+const uintSliceValue = slice_types.uintSliceValue;
+const boolSliceValue = slice_types.boolSliceValue;
+const floatSliceValue = slice_types.floatSliceValue;
 pub const SliceState = slice_types.SliceState;
-pub const stringToIntValue = map_types.stringToIntValue;
+const stringToIntValue = map_types.stringToIntValue;
 pub const StringToIntState = map_types.StringToIntState;
-pub const stringToStringValue = map_types.stringToStringValue;
+const stringToStringValue = map_types.stringToStringValue;
 pub const StringToStringState = map_types.StringToStringState;
 
 // ─── Flag ───
 
 /// One command-line flag: metadata plus the bound `value`. Created by the
-/// `xxxVar`/`xxxVarP` constructors or by hand + `FlagSet.addFlag`.
+/// `xxxVar`/`xxxVarP` registration methods (a custom `Value` needs a new
+/// `*_types.zig` module in this repo — the ctor/`varP` plumbing is internal).
 pub const Flag = struct {
     /// Long flag name, without the leading dashes (normalized at registration time).
     name: []const u8,
@@ -222,7 +226,7 @@ pub const FlagSet = struct {
     /// error.ShorthandTooLong, duplicate shorthand -> error.ShorthandRedefined.
     /// Honors the active normalize callback (the flag's name field is
     /// rewritten to its normalized form).
-    pub fn addFlag(self: *FlagSet, flag: *Flag) !void {
+    fn addFlag(self: *FlagSet, flag: *Flag) !void {
         const gpa = self.gpa;
         const nname = self.normalizeFlagName(flag.name);
         if (self.formal.contains(nname)) return error.FlagRedefined;
@@ -264,7 +268,7 @@ pub const FlagSet = struct {
     /// The single registration funnel: allocates the Flag, snapshots
     /// `value.string()` as the printed default, and calls `addFlag`.
     /// All typed `xxxVar`/`xxxVarP` helpers below are thin wrappers over this.
-    pub fn varP(self: *FlagSet, value: Value, name: []const u8, shorthand: []const u8, usage: []const u8) !*Flag {
+    fn varP(self: *FlagSet, value: Value, name: []const u8, shorthand: []const u8, usage: []const u8) !*Flag {
         const gpa = self.gpa;
         const flag = try gpa.create(Flag);
         errdefer gpa.destroy(flag);
