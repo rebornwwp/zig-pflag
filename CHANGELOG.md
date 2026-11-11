@@ -22,7 +22,14 @@ All notable changes to zig-pflag will be documented in this file.
 - `std.fmt.allocPrint(gpa, ...)` replaced with `gpa.print(...)` (moved to `std.mem.Allocator` in Zig 0.17)
 - `gpa` examples migrated from deprecated `std.heap.DebugAllocator` to thread-safe `std.heap.SafeAllocator`
 - `build.zig.zon`: `minimum_zig_version` bumped to `0.17.0`
-- Internal refactor: the `Value` interface (`ptr` + `VTable`) moved from `src/pflag.zig` into a new `src/value.zig`. The nine `*_types.zig` files now import the interface directly, removing the `pflag.zig ⇄ *_types.zig` import cycles. Public API is unchanged — `Value` is still re-exported as `pflag.Value`
+- **Layered internal refactor** — public API frozen (everything stays reachable through `pflag.zig`, examples and downstream users need no change); file layout now deliberately deviates from upstream's monolithic flag.go:
+  - `Value` interface (`ptr` + `VTable`) moved from `src/pflag.zig` to new `src/value.zig`; the nine `*_types.zig` import the interface directly, removing `pflag.zig ⇄ *_types.zig` import cycles
+  - new `src/internal.zig` leaf module owns shared `parseBool`, `readAsCSV`/`writeAsCSV`, and `splitKeyValue`; original locations keep re-exports (`pflag.slice_types.readAsCSV` etc. still resolve); `slice_types` no longer imports `bool_types`
+  - usage/help rendering extracted to `src/usage.zig`; the previously duplicated string-based and writer-based render stacks were unified behind `std.Io.Writer` (side effect: `flagUsagesWrapped` now shows `(deprecated: msg)` like `PrintDefaults`, instead of bare `(deprecated)`)
+  - the process-global CommandLine singleton and `*CL` helpers moved to `src/cmdline.zig`, flat-re-exported from `pflag.zig`
+  - the parse engine (`argLoop`/`longArg`/`shortArg`, `applyValue`/`doFailWith`/`markParsed`) lives in `src/parse.zig` as free functions taking `*FlagSet`; `FlagSet.parse`/`parseAll` are thin delegating shells; `pflag.zig` shrank 879 → ~560 lines
+  - int/uint/float slice vtables now share `makeNumSliceVtable(T, comptime parse)`; behavior unchanged (203→205-test suite stayed green throughout, zero test edits)
+  - `src/pflag_test.zig` split by concern: parse-engine tests → `parse_test.zig` (42), usage-rendering tests → `usage_test.zig` (28), shared helpers → `testutil.zig`, core registry/getter tests stay in `pflag_test.zig` (46)
 
 ## [0.1.0] - 2026-05-24
 

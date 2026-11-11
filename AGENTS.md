@@ -38,12 +38,16 @@ zig test --dep pflag -Mroot=src/pflag.zig -Mpflag=src/pflag.zig
 
 ## 架构
 
-文件布局镜像 Go pflag:
+上游 Go pflag 的 `flag.go` 本身是 1421 行巨石(Value/Flag/FlagSet/parse 引擎/usage 渲染全在里面,没有 value.go/usage.go)。本仓库自 0.17 起**有意按依赖方向分层偏离上游**,但**公开 API 始终冻结**——一切仍从 `pflag.zig` 可达,examples/外部用户零改动:
 
 - `src/value.zig`(~35 行):`Value` 接口本体(ptr + vtable,四个方法 `set`/`string`/`typeName`/`deinit`)。只依赖 `std`,不 import 本仓库任何其他文件,所以 9 个 `*_types.zig` 直接 `const Value = @import("value.zig").Value;` 而不会和 `pflag.zig` 绕成循环。
-- `src/pflag.zig`(~860 行):核心 —— `Flag`、`FlagSet`、`--long`/`-s` 解析引擎(`parseArgLoop`)、usage 格式化,并以 `pub const Value = @import("value.zig").Value` re-export 接口(外部 API 仍是 `pflag.Value`)。**不要**写成 `pub const value = @import("value.zig")`:本文件里函数参数名 `value` 铺天盖地,Zig 0.17 会报 "function parameter shadows declaration of 'value'"(~40 个错误)。其余文件都是 `Value` 的具体实现。
-- `src/*_types.zig`(9 个):每种 flag 类型一个文件,暴露 `xxxValue(...)` 构造函数,全部 comptime 泛型(`intVar(T)` 等)。
-- `src/pflag_test.zig`:核心 FlagSet 测试(92 个)。类型特定测试分散在各自的 `*_types.zig` 文件中。新增 flag 类型的测试应加在对应的类型文件中。
+- `src/internal.zig`(~130 行):叶子层共享 helper——`parseBool`、`readAsCSV`/`writeAsCSV`(`stringSlice` 的 CSV 语义)、`splitKeyValue`(`stringTo*` maps 的裸逗号+trim 语义——**和 CSV 语义不同,别合并**)。只依赖 `std`;`bool_types`/`slice_types`/`map_types` 原位置 re-export(`pflag.slice_types.readAsCSV` 等路径保持可用)。
+- `src/usage.zig`(~80 行):纯渲染层——`formatFlag`/`wrapUsage` 只吃 `*const Flag` + `std.Io.Writer`,不引用 FlagSet 状态。
+- `src/parse.zig`(~170 行):解析引擎——`argLoop`/`longArg`/`shortArg`/`singleShortArg` + `applyValue`/`doFailWith`/`markParsed`,自由函数首参 `fs: *FlagSet`。**Zig 0.17 可见性实测**:non-pub 结构体**字段**经 pub 容器跨文件可读可写(`fs._last_error` 合法),non-pub **方法**不可(编译错误 "'x' is not marked 'pub'");且未被引用的函数在 `zig build-obj` 探针里会因惰性分析跳过检查——别用"编译通过"当证据。引擎所需的簿记(`markParsed`)因此长在 parse.zig,`FlagSet.set()` 反向调用它。
+- `src/cmdline.zig`(~50 行):进程级 `commandLine` 单例 + `*CL` 便捷函数;`pflag.zig` 扁平 re-export 全部符号,老写法 `pflag.boolCL(...)` 不变。
+- `src/pflag.zig`(~560 行):`Flag`、`FlagSet`(字段、~40 个注册方法、`parse`/`parseAll` 委托薄壳、getter、annotations、`defaultUsage` 等包装),并以 `pub const Value = @import("value.zig").Value` re-export。**命名地雷**:向本文件 import 其他模块时 alias 必须避开常用参数名——`value`/`usage`/`parse` 全是到处都是的参数名,Zig 0.17 对"function parameter shadows declaration"直接报错;所以用 `usage_fmt`、`parse_engine`,且 value 只 re-export 类型不导出模块。其余文件都是 `Value` 的具体实现。
+- `src/*_types.zig`(9 个):每种 flag 类型一个文件,暴露 `xxxValue(...)` 构造函数,全部 comptime 泛型(`intVar(T)` 等)。int/uint/float 三种 numeric slice 的 vtable 主体共用 `makeNumSliceVtable(T, parse)`(comptime parse shim 用 `anytype` 传——fn 类型不能带推断错误集);bool slice 因其去引号+CSV 语义保留独立 vtable。
+- `src/pflag_test.zig`(46 块):注册/lookup/getter/annotations/visit 等核心 FlagSet 测试。解析引擎测试在 `src/parse_test.zig`(42 块,含 Go testParse 移植),usage 渲染测试在 `src/usage_test.zig`(28 块),共享测试 helper(`newTestFlagSet` 等)在 `src/testutil.zig`。三个测试文件都在 `pflag.zig` 的 `comptime { if (builtin.is_test) }` 块里注册——**新增测试文件必须在那里补一行,否则 0 tests 静默通过**。类型特定测试仍分散在各自 `*_types.zig`。
 - `examples/`:`demo.zig`(14 个文件之一,由 `zig build` 编译)、`struct_config.zig`,以及"3 类型(int/string/floatSlice)× 5 分配器(GPA/Arena/Page/FBA/c_allocator)"矩阵。改分配器相关代码时矩阵里的五个都要能编译。
 
 ### 加一种新 flag 类型
@@ -55,7 +59,7 @@ zig test --dep pflag -Mroot=src/pflag.zig -Mpflag=src/pflag.zig
 
 ## 测试规范
 
-**位置**: 类型特定测试放在对应的 `src/*_types.zig` 文件底部，核心 FlagSet 测试放在 `src/pflag_test.zig`。
+**位置**: 类型特定测试放在对应的 `src/*_types.zig` 文件底部；核心注册/getter FlagSet 测试放 `src/pflag_test.zig`，解析引擎行为放 `src/parse_test.zig`，usage 渲染放 `src/usage_test.zig`，共享 helper 放 `src/testutil.zig`（新建测试文件记得在 `pflag.zig` 的 `comptime is_test` 块注册）。
 
 **格式**: 使用 table-driven test 模式，将相似测试用例合并到一个 test 块中：
 
@@ -95,7 +99,7 @@ test "TypeName" {
 - slice/map 类型的状态由外部持有的 `*XxxState` 拥有,字符串通过 `gpa.dupe` 复制;`deinit` 里**只在用户真的设过值时才 free 逐项内存**(slice/map 看 `state.changed`,标量 `StringState` 看 `state.allocated`),因为默认值通常是库外持有的借用切片/字面量。
 - `FlagSet.deinit()` 会遍历 `ordered_formal`,逐个调 `flag.deinit(gpa)`(即 vtable 的 `deinit`)、free `def_value`、destroy flag。新加的类型必须正确实现 vtable deinit,否则泄漏。
 - `stringArrayVar` 和 `stringSliceVar` 的**替换语义相同**:首次 `Set` 清空默认值,之后追加(都靠 `state.changed` 判定)。别搞混。
-- 两者真正的区别在**值的拆分方式**:`stringSliceVar` 走 `readAsCSV`,引号内的逗号会被当成一个字段(`"a,b"` → 1 个元素),`string()` 输出也用 CSV 转义;`stringArrayVar` 把整个值原样当**一个**元素存,`string()` 输出只用逗号裸拼接。
+- 两者真正的区别在**值的拆分方式**:`stringSliceVar` 走 `readAsCSV`(现居 `internal.zig`,`slice_types` re-export),引号内的逗号会被当成一个字段(`"a,b"` → 1 个元素),`string()` 输出也用 CSV 转义;`stringArrayVar` 把整个值原样当**一个**元素存,`string()` 输出只用逗号裸拼接。
 - **`stringVar`/`stringVarP` 是 legacy 语义:Set 不复制,直接存调用方传入的指针**(`string_types.zig` 里的 `stringValue`/`stringVtableLegacy`)。传入的切片必须比 FlagSet 活得久。需要库来管理内存时用 `stringStateVar`/`stringStateVarP`(内部 `gpa.dupe`,`deinit` 时 free)。新增代码优先用后者。
 - `set()` 里凡是「先 `gpa.dupe`/分配,再交给容器持有」的写法,必须保证**所有权转移成功后才不再 free,转移失败则一定要 free**。两种已踩过的坑:
   - `try slice.append(gpa, try gpa.dupe(u8, v))` —— `append` OOM 时 dupe 出来的字符串**永远不会被释放**(所有权没转移成功,也没人 free)。正确写法是先 dupe 到局部变量 + `errdefer gpa.free(...)`,再 append。

@@ -419,7 +419,11 @@ zig build build-examples
 ```
 src/
 ├── value.zig          # Value interface (ptr + vtable dispatch)
-├── pflag.zig          # Flag, FlagSet, parse engine
+├── internal.zig       # shared leaf helpers (CSV / bool parse / key=value)
+├── usage.zig          # usage/help rendering + word wrap
+├── parse.zig          # argument parsing engine
+├── cmdline.zig        # global CommandLine singleton (*CL helpers)
+├── pflag.zig          # Flag, FlagSet, registration, entry shells
 ├── errors.zig         # ParseError, ErrorHandling
 ├── bool_types.zig     # Bool flag type
 ├── int_types.zig      # Int types (i8–i64, comptime-generic)
@@ -430,7 +434,10 @@ src/
 ├── duration_types.zig # Duration type (s/m/h/d)
 ├── slice_types.zig    # string/int/uint/bool/float slices
 ├── map_types.zig      # string→int, string→string maps
-├── pflag_test.zig     # 92 core FlagSet tests
+├── pflag_test.zig     # 46 core FlagSet tests
+├── parse_test.zig     # 42 parse-engine tests (Go testParse port incl.)
+├── usage_test.zig     # 28 usage-rendering tests
+├── testutil.zig       # shared test helpers
 ├── bool_types.zig     # bool + 10 tests
 ├── int_types.zig      # int + 8 tests
 ├── uint_types.zig     # uint + 5 tests
