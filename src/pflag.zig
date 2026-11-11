@@ -53,13 +53,12 @@ pub const readAsCSV = internal.readAsCSV;
 pub const writeAsCSV = internal.writeAsCSV;
 
 // ─── Value Interface ───
-// Lives in value.zig and stays FILE-PRIVATE from this module: the extension
-// mechanism (custom vtable + varP) is an upstream-Go affordance this port
-// deliberately does not publish — new flag types are contributed as *_types
-// files (see AGENTS.md checklist), which import value.zig directly.
-// `Flag.value` / the ctors below remain usable anonymously by callers.
+// Lives in value.zig; re-exported here as `pflag.Value` exactly like Go pflag,
+// whose `Value` interface is THE supported extension point (custom flags are
+// implemented downstream and registered via varP/addFlag). Built-in ctors
+// stay file-private — Go's newBoolValue & co are private too.
 
-const Value = @import("value.zig").Value;
+pub const Value = @import("value.zig").Value;
 
 // ─── Built-in Value Types ───
 // Implementation modules AND their ctors are file-private now: registering
@@ -104,8 +103,8 @@ pub const StringToStringState = map_types.StringToStringState;
 // ─── Flag ───
 
 /// One command-line flag: metadata plus the bound `value`. Created by the
-/// `xxxVar`/`xxxVarP` registration methods (a custom `Value` needs a new
-/// `*_types.zig` module in this repo — the ctor/`varP` plumbing is internal).
+/// `xxxVar`/`xxxVarP` registration methods, or by hand + `FlagSet.addFlag`/
+/// `varP` with a custom `Value` (Go's RegisterFlag-equivalent flow).
 pub const Flag = struct {
     /// Long flag name, without the leading dashes (normalized at registration time).
     name: []const u8,
@@ -226,7 +225,7 @@ pub const FlagSet = struct {
     /// error.ShorthandTooLong, duplicate shorthand -> error.ShorthandRedefined.
     /// Honors the active normalize callback (the flag's name field is
     /// rewritten to its normalized form).
-    fn addFlag(self: *FlagSet, flag: *Flag) !void {
+    pub fn addFlag(self: *FlagSet, flag: *Flag) !void {
         const gpa = self.gpa;
         const nname = self.normalizeFlagName(flag.name);
         if (self.formal.contains(nname)) return error.FlagRedefined;
@@ -265,10 +264,11 @@ pub const FlagSet = struct {
         }
     }
 
-    /// The single registration funnel: allocates the Flag, snapshots
-    /// `value.string()` as the printed default, and calls `addFlag`.
-    /// All typed `xxxVar`/`xxxVarP` helpers below are thin wrappers over this.
-    fn varP(self: *FlagSet, value: Value, name: []const u8, shorthand: []const u8, usage: []const u8) !*Flag {
+    /// The single registration funnel (Go `VarP`): allocates the Flag, snapshots
+    /// `value.string()` as the printed default, and calls `addFlag`. With
+    /// `pflag.Value` this is the supported downstream extension entry: build a
+    /// custom vtable, wrap into `Value`, register here.
+    pub fn varP(self: *FlagSet, value: Value, name: []const u8, shorthand: []const u8, usage: []const u8) !*Flag {
         const gpa = self.gpa;
         const flag = try gpa.create(Flag);
         errdefer gpa.destroy(flag);
