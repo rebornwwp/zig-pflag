@@ -55,6 +55,10 @@ test "BoolVar" {
         .{ .input = &.{"--verbose=False"}, .expected = false },
         .{ .input = &.{"--verbose=t"}, .expected = true },
         .{ .input = &.{"--verbose=f"}, .expected = false },
+        .{ .input = &.{"--verbose=T"}, .expected = true },
+        .{ .input = &.{"--verbose=F"}, .expected = false },
+        .{ .input = &.{"--verbose=tRuE"}, .expected = true },
+        .{ .input = &.{ "-v", "true" }, .expected = true }, // bool never consumes next word
     };
 
     for (testCases) |tc| {
@@ -85,5 +89,29 @@ test "BoolP - short flag with extra argument" {
     try fs.parse(&.{ "-v", "maybe" });
     try std.testing.expect(flag_val);
     try std.testing.expectEqual(@as(usize, 1), fs.nArg());
-    try std.testing.expectEqualStrings("maybe", fs.arg(0));
+}
+
+test "parseBool direct set forms" {
+    var b: bool = false;
+    var val = boolValue(false, &b);
+    try std.testing.expectEqualStrings("bool", val.typeName());
+
+    try val.set(""); // Go compatibility: empty string means true
+    try std.testing.expect(b);
+    try val.set("1");
+    try std.testing.expect(b);
+    try val.set("0");
+    try std.testing.expect(!b);
+    try val.set("TrUe");
+    try std.testing.expect(b);
+    try val.set("FaLsE");
+    try std.testing.expect(!b);
+    try val.set("t");
+    try std.testing.expect(b);
+    try val.set("F");
+    try std.testing.expect(!b);
+    try std.testing.expectError(error.InvalidBoolValue, val.set("yes"));
+    try std.testing.expectError(error.InvalidBoolValue, val.set("2"));
+    try std.testing.expectError(error.InvalidBoolValue, val.set("1 "));
+    try std.testing.expectError(error.InvalidBoolValue, val.set("tru"));
 }

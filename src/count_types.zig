@@ -58,6 +58,10 @@ test "CountVar" {
         .{ .input = &.{ "-v=3", "-v" }, .success = true, .expected = 4 },
         .{ .input = &.{"--verbose=0"}, .success = true, .expected = 0 },
         .{ .input = &.{"-v=0"}, .success = true, .expected = 0 },
+        .{ .input = &.{"--verbose=-2"}, .success = true, .expected = -2 }, // explicit set replaces
+        .{ .input = &.{"--verbose=0x10"}, .success = true, .expected = 16 }, // radix-0 honored
+        .{ .input = &.{"-v=+3"}, .success = true, .expected = 3 },
+        .{ .input = &.{ "--verbose=10", "--verbose" }, .success = true, .expected = 11 }, // =N then bare occurrence
         .{ .input = &.{"-v=a"}, .success = false, .expected = 0 },
     };
 
@@ -101,4 +105,5 @@ test "Count string() output" {
     const str = try flag.value.string(std.testing.allocator);
     defer std.testing.allocator.free(str);
     try std.testing.expectEqualStrings("3", str);
+    try std.testing.expectEqualStrings("count", flag.value.typeName());
 }

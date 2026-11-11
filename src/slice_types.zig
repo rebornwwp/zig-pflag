@@ -594,6 +594,7 @@ test "IntSlice" {
     const testCases = [_]TestCase{
         .{ .input = &.{ "--num=1", "--num=2", "--num=3" }, .expected_len = 3, .expected_first = 1 },
         .{ .input = &.{"--num=10,20,30"}, .expected_len = 3, .expected_first = 10 },
+        .{ .input = &.{"--num=0x10,1_000,-5"}, .expected_len = 3, .expected_first = 16 }, // radix-0 + underscore + negative
     };
 
     for (testCases) |tc| {
@@ -803,6 +804,10 @@ test "FloatSlice" {
     try std.testing.expectApproxEqRel(@as(f64, 1.5), slice.items[0], 0.001);
     try std.testing.expectApproxEqRel(@as(f64, 2.7), slice.items[1], 0.001);
     try std.testing.expectApproxEqRel(@as(f64, 3.14), slice.items[2], 0.001);
+    // second Set appends; exponent and negative forms parse fine
+    try fs.parse(&.{"--vals=1e3,-2.5"});
+    try std.testing.expectApproxEqRel(@as(f64, 1000), slice.items[3], 0.001);
+    try std.testing.expectApproxEqRel(@as(f64, -2.5), slice.items[4], 0.001);
 }
 
 test "FloatSlice CalledTwice - multiple Set calls append" {
@@ -887,6 +892,10 @@ test "UintSlice" {
     try std.testing.expectEqual(@as(u32, 10), slice.items[0]);
     try std.testing.expectEqual(@as(u32, 20), slice.items[1]);
     try std.testing.expectEqual(@as(u32, 30), slice.items[2]);
+    // second Set appends; radix-0 and underscores honored by makeNumSliceVtable
+    try fs.parse(&.{"--nums=0x10,1_000"});
+    try std.testing.expectEqual(@as(u32, 16), slice.items[3]);
+    try std.testing.expectEqual(@as(u32, 1000), slice.items[4]);
 }
 
 test "UintSlice CalledTwice - multiple Set calls append" {

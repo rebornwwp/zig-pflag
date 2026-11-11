@@ -78,6 +78,13 @@ test "UintVar" {
         .{ .flag_name = "port", .shorthand = "p", .input = &.{ "-p", "8080" }, .expected = 8080 },
         .{ .flag_name = "count", .input = &.{"--count=0x2a"}, .expected = 42 }, // hex
         .{ .flag_name = "count", .input = &.{"--count=0o52"}, .expected = 42 }, // octal
+        .{ .flag_name = "count", .input = &.{"--count=0b101"}, .expected = 5 }, // binary
+        .{ .flag_name = "count", .input = &.{"--count=+7"}, .expected = 7 }, // unary plus
+        .{ .flag_name = "count", .input = &.{"--count=2_048"}, .expected = 2048 }, // underscores
+        .{ .flag_name = "count", .input = &.{"--count=0777"}, .expected = 777 }, // radix-0: leading 0 stays DECIMAL (Go: octal 511)
+        .{ .flag_name = "count", .input = &.{"--count=0"}, .expected = 0 },
+        .{ .flag_name = "count", .input = &.{"-p=9"}, .shorthand = "p", .expected = 9 },
+        .{ .flag_name = "count", .input = &.{"--count=-0"}, .expected = 0 }, // signed zero lands exactly on 0
     };
 
     for (testCases) |tc| {
@@ -94,23 +101,54 @@ test "UintVar" {
     }
 }
 
-test "UintVar different types" {
+fn checkUintWidth(comptime T: type) !void {
+    var v: T = 0;
     var fs = pflag.FlagSet.init(std.testing.allocator, "test");
     defer fs.deinit();
-    var a: u8 = 0;
-    var b: u64 = 0;
-    try fs.uintVar(u8, &a, "a", 0, "");
-    try fs.uintVar(u64, &b, "b", 0, "");
-    try fs.parse(&.{ "--a=255", "--b=18446744073709551615" });
-    try std.testing.expectEqual(@as(u8, 255), a);
-    try std.testing.expectEqual(@as(u64, 18446744073709551615), b);
+    try fs.uintVar(T, &v, "n", 0, "");
+
+    const max_s = try std.fmt.allocPrint(std.testing.allocator, "{d}", .{@as(u128, std.math.maxInt(T))});
+    defer std.testing.allocator.free(max_s);
+    const over_s = try std.fmt.allocPrint(std.testing.allocator, "{d}", .{@as(u128, std.math.maxInt(T)) + 1});
+    defer std.testing.allocator.free(over_s);
+
+    try fs.set("n", "0");
+    try std.testing.expectEqual(@as(T, 0), v);
+    try fs.set("n", max_s);
+    try std.testing.expectEqual(std.math.maxInt(T), v);
+    try std.testing.expectError(error.Overflow, fs.set("n", over_s));
+    // negative values parse as signed and then fail the width fit check
+    try std.testing.expectError(error.Overflow, fs.set("n", "-1"));
+    try std.testing.expectError(error.Overflow, fs.set("n", "-9999"));
+    inline for (.{ "abc", "", "1x", "0x", " 1" }) |bad| {
+        try std.testing.expectError(error.InvalidCharacter, fs.set("n", bad));
+    }
 }
 
-test "UintVar rejects negative values" {
-    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
-    defer fs.deinit();
-    fs.error_handling = .continue_on_error;
-    var count: u32 = 0;
-    try fs.uintVar(u32, &count, "count", 0, "");
-    try std.testing.expectError(error.Overflow, fs.parse(&.{"--count=-1"}));
+test "UintVar widths: bounds, overflow, negatives, invalid forms" {
+    try checkUintWidth(u8);
+    try checkUintWidth(u16);
+    try checkUintWidth(u32);
+    try checkUintWidth(u64);
+}
+
+fn checkUintStr(comptime T: type, input: []const u8, expected: []const u8) !void {
+    var v: T = 0;
+    var val = uintValue(T, 0, &v);
+    try std.testing.expectEqualStrings(@typeName(T), val.typeName());
+    try val.set(input);
+    const s = try val.string(std.testing.allocator);
+    defer std.testing.allocator.free(s);
+    try std.testing.expectEqualStrings(expected, s);
+}
+
+test "UintValue string output normalizes to decimal" {
+    try checkUintStr(u8, "255", "255");
+    try checkUintStr(u8, "0x10", "16");
+    try checkUintStr(u16, "+32768", "32768");
+    try checkUintStr(u16, "0777", "777");
+    try checkUintStr(u32, "0b10000", "16");
+    try checkUintStr(u32, "-0", "0");
+    try checkUintStr(u64, "18446744073709551615", "18446744073709551615");
+    try checkUintStr(u64, "1_000_000", "1000000");
 }

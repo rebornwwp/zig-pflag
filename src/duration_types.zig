@@ -92,6 +92,11 @@ test "DurationVar" {
         .{ .input = "500ms", .expected = 500 * std.time.ns_per_ms },
         .{ .input = "100us", .expected = 100 * std.time.ns_per_us },
         .{ .input = "200ns", .expected = 200 },
+        .{ .input = "-5s", .expected = -5 * std.time.ns_per_s },
+        .{ .input = "+2m", .expected = 2 * std.time.ns_per_min },
+        .{ .input = "0ns", .expected = 0 },
+        .{ .input = "3600s", .expected = 3600 * std.time.ns_per_s },
+        .{ .input = "1000ms", .expected = std.time.ns_per_s },
     };
 
     for (testCases) |tc| {
@@ -104,6 +109,23 @@ test "DurationVar" {
         try fs.parse(&.{arg});
         try std.testing.expectEqual(tc.expected, d);
     }
+}
+
+test "DurationVar malformed inputs" {
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+    var d: i64 = 0;
+    try fs.durationVar(&d, "t", 0, "");
+    // too short to carry a unit (len < 2)
+    inline for (.{ "", "5", "s" }) |bad| {
+        try std.testing.expectError(error.InvalidDuration, fs.set("t", bad));
+    }
+    // number part is base-10 only: no radix prefixes, no fractional values
+    inline for (.{ "0x1s", "1.5s", "1e3s" }) |bad| {
+        try std.testing.expectError(error.InvalidCharacter, fs.set("t", bad));
+    }
+    // parse-stage overflow, before any unit multiplication can occur
+    try std.testing.expectError(error.Overflow, fs.set("t", "9223372036854775808s"));
 }
 
 test "DurationVar invalid format returns error" {
