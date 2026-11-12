@@ -409,7 +409,7 @@ zig build build-examples
 |---------|-------------|
 | `zig build run-demo` | Full demo (all flag types) |
 | `zig build run-struct-config` | Struct field binding |
-| `zig build build-examples` | Compile all 15 examples |
+| `zig build build-examples` | Compile all 18 examples |
 | `zig build docs` | Generate HTML API docs → `zig-out/docs` (open `index.html`) |
 
 ## FlagSet API
@@ -505,9 +505,9 @@ src/
 examples/
 ├── demo.zig           # Full demo (all flag types)
 ├── struct_config.zig  # Struct field binding to flags
-├── int_*.zig          # int + GPA/Arena/Page/FBA/c_allocator
-├── string_*.zig       # string + GPA/Arena/Page/FBA/c_allocator
-└── float_slice_*.zig  # floatSlice + GPA/Arena/Page/FBA/c_allocator
+├── int_*.zig          # int + GPA/Arena/Page/FBA/c_allocator/smp_allocator
+├── string_*.zig       # string + GPA/Arena/Page/FBA/c_allocator/smp_allocator
+└── float_slice_*.zig  # floatSlice + GPA/Arena/Page/FBA/c_allocator/smp_allocator
 ```
 
 ## License

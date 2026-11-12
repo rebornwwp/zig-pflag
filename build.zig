@@ -101,12 +101,12 @@ pub fn build(b: *std.Build) void {
 
     // ── Allocator examples (N types × M allocators) ──
     const example_names = [_][]const u8{
-        "int_gpa",         "int_arena",         "int_page",         "int_fba",         "int_c_allocator",
-        "string_gpa",      "string_arena",      "string_page",      "string_fba",      "string_c_allocator",
-        "float_slice_gpa", "float_slice_arena", "float_slice_page", "float_slice_fba", "float_slice_c_allocator",
+        "int_gpa",         "int_arena",         "int_page",         "int_fba",         "int_c_allocator",         "int_smp_allocator",
+        "string_gpa",      "string_arena",      "string_page",      "string_fba",      "string_c_allocator",      "string_smp_allocator",
+        "float_slice_gpa", "float_slice_arena", "float_slice_page", "float_slice_fba", "float_slice_c_allocator", "float_slice_smp_allocator",
     };
 
-    const build_examples_step = b.step("build-examples", "Build all allocator examples (15 exes)");
+    const build_examples_step = b.step("build-examples", "Build all allocator examples (18 exes)");
     const run_all_examples_step = b.step("run-examples", "Run all allocator examples");
 
     for (example_names) |name| {
