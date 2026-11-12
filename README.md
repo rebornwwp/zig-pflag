@@ -180,6 +180,40 @@ These are rare edge cases. The parser handles the common cases: comma separation
   bad element, `-f=`/glued/separated shorthand paths per type, and the OOM
   errdefer paths driven by `std.testing.checkAllAllocationFailures`.
 
+## Memory & Lifetime Notes
+
+### `stringVar` / `stringVarP` (legacy)
+
+- `stringVar`/`stringVarP` do **not** copy the parsed string value. On `set()`, they store the caller-provided slice pointer directly.
+- The string data must outlive the `FlagSet` (and any later reads). If the backing argument buffer is modified/freed after parsing, reading the flag value becomes a dangling reference / undefined behavior (it may appear corrupted, or crash).
+- `FlagSet.deinit()` does not free this string data because the library does not own it.
+
+Prefer `stringStateVar` / `stringStateVarP` when the source lifetime is uncertain:
+
+```zig
+var name: []const u8 = "world";
+var name_state = pflag.StringState{ .value = &name, .gpa = gpa };
+try fs.stringStateVarP(&name_state, "name", "n", "world", "your name");
+```
+
+`StringState` duplicates the default and every parsed value with `state.gpa`, tracks ownership (`allocated`), replaces/frees previous library-owned values on later sets, and releases library-owned storage during `FlagSet.deinit()`. Pass the same allocator to `state.gpa` and `FlagSet.init` — `deinit()` releases through the FlagSet's allocator.
+
+### State-backed collection/string-map types
+
+The following APIs take a caller-owned state object that provides the target storage and allocator; the library uses it to manage parsed data:
+
+- `stringSliceVar` / `stringSliceVarP` → `StringSliceState`
+- `stringArrayVar` / `stringArrayVarP` → `StringArrayState`
+- `intSliceVar` / `uintSliceVar` / `boolSliceVar` / `floatSliceVar` → `SliceState(T)`
+- `stringToIntVar` / `stringToIntVarP` → `StringToIntState(T)`
+- `stringToStringVar` / `stringToStringVarP` → `StringToStringState`
+
+Notes:
+
+- Keep the state (and the container it points to) alive for as long as the `FlagSet`/parsed values are used.
+- Use the same allocator for `state.gpa` as you passed to `FlagSet.init`; the library duplicates elements/entries as needed and frees library-owned data on updates/deinit according to type semantics.
+- Call `FlagSet.deinit()` to release flag-owned resources. Do not manually free library-managed contents unless you fully understand the ownership rules for that type.
+
 ## Demo
 
 A fully working example demonstrating every flag type is in `examples/demo.zig`.

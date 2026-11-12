@@ -175,6 +175,40 @@ pub fn main(init: std.process.Init) !void {
 - **上游 Go pflag**：~191 个 Test 函数
 - 上游可移植的 parse/usage 场景几乎全部覆盖；此外还补了一套 Go 测试不涉及的 Zig 行为矩阵——radix-0 标量、float 静默钳位、slice 元素错误时原子提交（不部分写入）、各类型的 `-f=`/粘连/空格短形式，以及由 `checkAllAllocationFailures` 驱动的 OOM errdefer 路径。
 
+## 内存与生命周期注意事项
+
+### `stringVar` / `stringVarP`（legacy）
+
+- `stringVar`/`stringVarP` **不会**拷贝解析后的字符串值。`set()` 时会直接保存调用方传入/解析得到的 slice 指针。
+- 字符串数据的生命周期必须覆盖 `FlagSet`（以及后续读取）。如果解析后原始参数缓冲区被改写或释放，再读取该 flag 值会形成悬垂引用/未定义行为（可能乱码，也可能崩溃）。
+- `FlagSet.deinit()` 不会释放这份字符串数据，因为库并不拥有它。
+
+当输入来源生命周期不确定时，优先使用 `stringStateVar` / `stringStateVarP`：
+
+```zig
+var name: []const u8 = "world";
+var name_state = pflag.StringState{ .value = &name, .gpa = gpa };
+try fs.stringStateVarP(&name_state, "name", "n", "world", "your name");
+```
+
+`StringState` 会用 `state.gpa` 复制默认值和每次解析值，跟踪所有权（`allocated`），在后续设置时替换/释放库持有的旧值，并在 `FlagSet.deinit()` 时释放库管理的存储。请让 `state.gpa` 与传给 `FlagSet.init` 的 allocator 保持一致——`deinit()` 是通过 FlagSet 的 allocator 释放的。
+
+### 使用 State 的集合/映射类型
+
+以下 API 需要传入调用方持有的 state 对象（提供目标存储和分配器），库会据此管理解析后的数据：
+
+- `stringSliceVar` / `stringSliceVarP` → `StringSliceState`
+- `stringArrayVar` / `stringArrayVarP` → `StringArrayState`
+- `intSliceVar` / `uintSliceVar` / `boolSliceVar` / `floatSliceVar` → `SliceState(T)`
+- `stringToIntVar` / `stringToIntVarP` → `StringToIntState(T)`
+- `stringToStringVar` / `stringToStringVarP` → `StringToStringState`
+
+注意：
+
+- 在 `FlagSet`/解析结果使用期间，请确保 state（及其指向的容器）保持有效。
+- `state.gpa` 应与传给 `FlagSet.init` 的 allocator 保持一致；库会按类型语义复制元素/条目，并在更新或 `deinit` 时释放库持有的数据。
+- 调用 `FlagSet.deinit()` 以释放 flag 相关资源；除非明确了解对应类型的所有权规则，否则不要手动释放库管理的内容。
+
 ## 示例
 
 `examples/demo.zig` 中包含了一个展示所有参数类型的完整示例。
