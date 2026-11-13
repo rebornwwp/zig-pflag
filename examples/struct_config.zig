@@ -39,11 +39,13 @@ pub fn main(init: std.process.Init) !void {
     var fs = pflag.FlagSet.init(gpa, "struct-config");
     defer fs.deinit();
 
-    // Bind struct fields to flags
+    // Bind struct fields to flags — the config struct holds plain business
+    // fields only: stringVarOwned* lets the FlagSet own the backing state,
+    // so no *State members, stored allocator, or manual deinit choreography.
     var cfg: ServerConfig = .{};
 
     try fs.uintVarP(u16, &cfg.port, "port", "p", cfg.port, "listen port");
-    try fs.stringVarP(&cfg.host, "host", "h", cfg.host, "bind address");
+    try fs.stringVarOwnedP(&cfg.host, "host", "h", cfg.host, "bind address");
     try fs.intVarP(i32, &cfg.workers, "workers", "w", cfg.workers, "worker threads");
     try fs.boolVarP(&cfg.verbose, "verbose", "v", cfg.verbose, "verbose output");
     try fs.durationVarP(&cfg.timeout_ns, "timeout", "t", cfg.timeout_ns, "request timeout");
