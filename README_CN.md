@@ -4,7 +4,7 @@
 
 Zig 的 POSIX/GNU 风格命令行参数解析库，从 Go 的 [spf13/pflag](https://github.com/spf13/pflag) v1.0.9 移植而来。
 
-Zig 0.17.0 · 16 个库文件 · ~4050 行库代码 · 210 个测试
+Zig 0.17.0 · 16 个库文件 · ~4240 行库代码 · 214 个测试
 
 ## 安装
 
@@ -171,7 +171,7 @@ pub fn main(init: std.process.Init) !void {
 
 ### 测试覆盖
 
-- **本工程**：210 个测试块——table-driven，合计数百个用例，并含 OOM 失败注入
+- **本工程**：214 个测试块——table-driven，合计数百个用例，并含 OOM 失败注入
 - **上游 Go pflag**：~191 个 Test 函数
 - 上游可移植的 parse/usage 场景几乎全部覆盖；此外还补了一套 Go 测试不涉及的 Zig 行为矩阵——radix-0 标量、float 静默钳位、slice 元素错误时原子提交（不部分写入）、各类型的 `-f=`/粘连/空格短形式，以及由 `checkAllAllocationFailures` 驱动的 OOM errdefer 路径。
 
@@ -192,6 +192,15 @@ try fs.stringStateVarP(&name_state, "name", "n", "world", "your name");
 ```
 
 `StringState` 会用 `state.gpa` 复制默认值和每次解析值，跟踪所有权（`allocated`），在后续设置时替换/释放库持有的旧值，并在 `FlagSet.deinit()` 时释放库管理的存储。请让 `state.gpa` 与传给 `FlagSet.init` 的 allocator 保持一致——`deinit()` 是通过 FlagSet 的 allocator 释放的。
+
+新代码更省事的形式是 `stringVarOwned` / `stringVarOwnedP`：`FlagSet` 自行分配并持有背后的 `StringState`，用自身 allocator 复制默认值与每次解析值，`FlagSet.deinit()` 时连同 state 壳一并释放：
+
+```zig
+var name: []const u8 = "world";
+try fs.stringVarOwnedP(&name, "name", "n", "world", "your name");
+```
+
+配置结构从此只绑普通 `*[]const u8` 字段：不再有 `*State` 成员、不再存 allocator、不再手写析构。注册失败（重名/短名冲突/任意 OOM）时，FlagSet 与绑定变量都保持原样。需要观察或复用 state 时继续用 `stringStateVar*`。两条规则：经 owned API 注册的 flag 不要通过 `addFlagSet` 共享（注册方持有其 state 的销毁权）；全局单例有对应版本 `pflag.stringCLOwned` / `pflag.stringCLOwnedP`，随 `deinitCommandLine()` 一起释放。
 
 ### 使用 State 的集合/映射类型
 

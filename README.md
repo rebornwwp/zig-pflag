@@ -4,7 +4,7 @@
 
 POSIX/GNU-style flag parsing for Zig, ported from Go's [spf13/pflag](https://github.com/spf13/pflag) v1.0.9.
 
-Zig 0.17.0 · 16 library files · ~4050 lines · 210 tests
+Zig 0.17.0 · 16 library files · ~4240 lines · 214 tests
 
 ## Installation
 
@@ -171,7 +171,7 @@ These are rare edge cases. The parser handles the common cases: comma separation
 
 ### Test Coverage
 
-- **Zig suite**: 210 test blocks — table-driven, so hundreds of case
+- **Zig suite**: 214 test blocks — table-driven, so hundreds of case
   variants in total, including allocation-failure injection
 - **Upstream Go pflag**: ~191 `Test` functions
 - Nearly every portable parse/usage scenario upstream exercises is ported.
@@ -197,6 +197,15 @@ try fs.stringStateVarP(&name_state, "name", "n", "world", "your name");
 ```
 
 `StringState` duplicates the default and every parsed value with `state.gpa`, tracks ownership (`allocated`), replaces/frees previous library-owned values on later sets, and releases library-owned storage during `FlagSet.deinit()`. Pass the same allocator to `state.gpa` and `FlagSet.init` — `deinit()` releases through the FlagSet's allocator.
+
+For new code the zero-boilerplate form is `stringVarOwned` / `stringVarOwnedP`: the `FlagSet` allocates and owns the backing `StringState` itself, dupes the default and every parsed value through its own allocator, and frees everything — state shell included — during `FlagSet.deinit()`:
+
+```zig
+var name: []const u8 = "world";
+try fs.stringVarOwnedP(&name, "name", "n", "world", "your name");
+```
+
+Config structs then bind plain `*[]const u8` fields: no `*State` members, no stored allocator, no teardown choreography. Registration failures (duplicate name/shorthand, any OOM) leave both the set and the bound variable untouched. Keep `stringStateVar*` when you need to observe or reuse the state object directly. Two rules: flags registered via the owned API must not be shared through `addFlagSet` (the registering set destroys their state), and the process-global set has matching helpers — `pflag.stringCLOwned` / `pflag.stringCLOwnedP` — freed by `deinitCommandLine()`.
 
 ### State-backed collection/string-map types
 

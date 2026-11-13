@@ -9,7 +9,7 @@ zig-pflag:Go [spf13/pflag v1.0.9](https://github.com/spf13/pflag) 的 Zig 移植
 ## 命令
 
 ```bash
-zig build test                              # 跑全部 210 个测试(唯一测试入口)
+zig build test                              # 跑全部 214 个测试(唯一测试入口)
 zig build test --summary all                # 逐条列出测试名
 zig build build-examples                    # 编译 18 个示例(demo 由 zig build 单独编译)
 zig build docs                              # 生成 HTML API 文档到 zig-out/docs(编译器 -femit-docs 包,可选步骤,不进 CI)
@@ -27,7 +27,7 @@ zig fmt --check src/ examples/ build.zig    # CI 的格式检查(范围不含根
 zig test --dep pflag -Mroot=src/pflag.zig -Mpflag=src/pflag.zig
 ```
 
-这会输出 `All 210 tests passed.` 显示测试总数。
+这会输出 `All 214 tests passed.` 显示测试总数。
 
 改动后必须至少跑 `zig build test` + `zig build build-examples`(CI 检查:fmt → test → build-examples → build)。
 
@@ -45,8 +45,8 @@ zig test --dep pflag -Mroot=src/pflag.zig -Mpflag=src/pflag.zig
 - `src/internal.zig`(~130 行):叶子层共享 helper——`parseBool`、`readAsCSV`/`writeAsCSV`(`stringSlice` 的 CSV 语义)、`splitKeyValue`(`stringTo*` maps 的裸逗号+trim 语义——**和 CSV 语义不同,别合并**)。只依赖 `std`;`parseBool`/`readAsCSV`/`writeAsCSV` 经 `pflag.zig` 扁平公开(`pflag.parseBool` 等),`splitKeyValue` 保持内部。
 - `src/usage.zig`(~80 行):纯渲染层——`formatFlag`/`wrapUsage` 只吃 `*const Flag` + `std.Io.Writer`,不引用 FlagSet 状态。
 - `src/parse.zig`(~170 行):解析引擎——`argLoop`/`longArg`/`shortArg`/`singleShortArg` + `applyValue`/`doFailWith`/`markParsed`,自由函数首参 `fs: *FlagSet`。**Zig 0.17 可见性实测**:non-pub 结构体**字段**经 pub 容器跨文件可读可写(`fs._last_error` 合法),non-pub **方法**不可(编译错误 "'x' is not marked 'pub'");且未被引用的函数在 `zig build-obj` 探针里会因惰性分析跳过检查——别用"编译通过"当证据。引擎所需的簿记(`markParsed`)因此长在 parse.zig,`FlagSet.set()` 反向调用它。
-- `src/cmdline.zig`(~65 行):进程级 `commandLine` 单例 + `*CL` 便捷函数;`pflag.zig` 扁平 re-export 全部符号,老写法 `pflag.boolCL(...)` 不变。
-- `src/pflag.zig`(~780 行):`Flag`、`FlagSet`(字段、~40 个注册方法、`parse`/`parseAll` 委托薄壳、getter、annotations、`defaultUsage` 等包装),并以 `pub const Value = @import("value.zig").Value` re-export。**命名地雷**:向本文件 import 其他模块时 alias 必须避开常用参数名——`value`/`usage`/`parse` 全是到处都是的参数名,Zig 0.17 对"function parameter shadows declaration"直接报错;所以用 `usage_fmt`、`parse_engine`。**公开面 = 仅 `pflag.zig` 顶层扁平名字(28 个)**:errors、9 个 `*_types`、value/internal/usage/parse/cmdline 全部只留 file-private import 别名,**不导出任何模块命名空间表**(历史上曾有 `pflag.bool_types` 等 10 张表,已收回);`Value`/`varP`/`addFlag` 按 Go parity 公开(扩展链三件套,见 value.zig 条),但 16 个 ctor 保持内部——加新内建类型按下面的 checklist,别再挂回任何一张表。helper 走 `pflag.parseBool`/`readAsCSV`/`writeAsCSV` 扁平路径,CL 函数同理。其余文件都是 `Value` 的具体实现。
+- `src/cmdline.zig`(~80 行):进程级 `commandLine` 单例 + `*CL` 便捷函数;`pflag.zig` 扁平 re-export 全部符号,老写法 `pflag.boolCL(...)` 不变。
+- `src/pflag.zig`(~845 行):`Flag`、`FlagSet`(字段 + `managed_states` 所有权注册表、~40 个注册方法(含 `stringVarOwned*`)、`parse`/`parseAll` 委托薄壳、getter、annotations、`defaultUsage` 等包装),并以 `pub const Value = @import("value.zig").Value` re-export。**命名地雷**:向本文件 import 其他模块时 alias 必须避开常用参数名——`value`/`usage`/`parse` 全是到处都是的参数名,Zig 0.17 对"function parameter shadows declaration"直接报错;所以用 `usage_fmt`、`parse_engine`。**公开面 = 仅 `pflag.zig` 顶层扁平名字(30 个)**:errors、9 个 `*_types`、value/internal/usage/parse/cmdline 全部只留 file-private import 别名,**不导出任何模块命名空间表**(历史上曾有 `pflag.bool_types` 等 10 张表,已收回);`Value`/`varP`/`addFlag` 按 Go parity 公开(扩展链三件套,见 value.zig 条),但 16 个 ctor 保持内部——加新内建类型按下面的 checklist,别再挂回任何一张表。helper 走 `pflag.parseBool`/`readAsCSV`/`writeAsCSV` 扁平路径,CL 函数同理(含 `stringCLOwned*`)。其余文件都是 `Value` 的具体实现。
 - `src/*_types.zig`(9 个):每种 flag 类型一个文件,暴露 `xxxValue(...)` 构造函数,全部 comptime 泛型(`intVar(T)` 等)。int/uint/float 三种 numeric slice 的 vtable 主体共用 `makeNumSliceVtable(T, parse)`(comptime parse shim 用 `anytype` 传——fn 类型不能带推断错误集);bool slice 因其去引号+CSV 语义保留独立 vtable。**numeric/bool slice 的 `set` 都是先在局部 buffer 解析整表、成功后才一次性提交**:元素错误不部分提交、不预清默认值、不消耗 `changed`(与上游一致,`numeric slices parse errors and state preservation` 测试块锁死)。
 - `src/pflag_test.zig`(46 块):注册/lookup/getter/annotations/visit 等核心 FlagSet 测试。解析引擎测试在 `src/parse_test.zig`(42 块,含 Go testParse 移植),usage 渲染测试在 `src/usage_test.zig`(28 块),共享测试 helper(`newTestFlagSet` 等)在 `src/testutil.zig`。三个测试文件都在 `pflag.zig` 的 `comptime { if (builtin.is_test) }` 块里注册——**新增测试文件必须在那里补一行,否则 0 tests 静默通过**。类型特定测试仍分散在各自 `*_types.zig`。
 - `examples/` 共 23 个 .zig:`demo.zig`(由根 `zig build` 编译安装,注册了全部 16 个 Var 家族含 `stringStateVar`)、`struct_config.zig` / `shorthand_lookup.zig` / `string_to_string.zig` / `interspersed.zig` 四个独立示例(各有 `run-<name>` 步骤)、以及"3 类型(int/string/floatSlice)× 6 分配器(GPA/Arena/Page/FBA/c_allocator/smp_allocator)"= 18 个矩阵示例(`build-examples` 编译的就是这 18 个,`run-examples` 逐个运行)。改分配器相关代码时矩阵里的六个都要能编译。
@@ -101,7 +101,8 @@ test "TypeName" {
 - `FlagSet.deinit()` 会遍历 `ordered_formal`,逐个调 `flag.deinit(gpa)`(即 vtable 的 `deinit`)、free `def_value`、destroy flag。新加的类型必须正确实现 vtable deinit,否则泄漏。
 - `stringArrayVar` 和 `stringSliceVar` 的**替换语义相同**:首次 `Set` 清空默认值,之后追加(都靠 `state.changed` 判定)。别搞混。
 - 两者真正的区别在**值的拆分方式**:`stringSliceVar` 走 `readAsCSV`(现居 `internal.zig`,`slice_types` re-export),引号内的逗号会被当成一个字段(`"a,b"` → 1 个元素),`string()` 输出也用 CSV 转义;`stringArrayVar` 把整个值原样当**一个**元素存,`string()` 输出只用逗号裸拼接。
-- **`stringVar`/`stringVarP` 是 legacy 语义:Set 不复制,直接存调用方传入的指针**(`string_types.zig` 里的 `stringValue`/`stringVtableLegacy`)。传入的切片必须比 FlagSet 活得久。需要库来管理内存时用 `stringStateVar`/`stringStateVarP`(内部 `gpa.dupe`,`deinit` 时 free)。新增代码优先用后者。
+- **`stringVar`/`stringVarP` 是 legacy 语义:Set 不复制,直接存调用方传入的指针**(`string_types.zig` 里的 `stringValue`/`stringVtableLegacy`)。传入的切片必须比 FlagSet 活得久。需要库来管理内存时用 `stringStateVar`/`stringStateVarP`(内部 `gpa.dupe`,`deinit` 时 free)。新增代码优先用 `stringVarOwned`/`stringVarOwnedP`(见下条,FlagSet 自持 state、零簿记),需要观察/复用 state 时才用 `stringStateVar*`。
+- **managed state(`stringVarOwned*`)= FlagSet 自己分配并拥有 state 壳**,登记在 `managed_states` 注册表;`deinit()` 里**先跑完全部 `flag.deinit(gpa)` 再逐个 destroy 壳、最后 deinit 容器**——顺序反了就是 use-after-free(vtable deinit 解引用 state)。**别给 `StringState` 加 `deinit` 方法**:`gpa.destroy` 会自动调用它,和 vtable 已释放的内部字符串构成 double free(debug/release 行为还不一致)。注册顺序同理固定:**先 append 注册表、后 `stringStateVarP`**;反过来会在 append OOM 时留下指向已销毁 state 的已注册 flag。失败路径依次 pop 注册表、free 已 dupe 的默认值、恢复 `*p` 旧值。managed flag 禁止经 `addFlagSet` 共享(所有权属于注册方,文档约定非运行时检查)。
 - `set()` 里凡是「先 `gpa.dupe`/分配,再交给容器持有」的写法,必须保证**所有权转移成功后才不再 free,转移失败则一定要 free**。两种已踩过的坑:
   - `try slice.append(gpa, try gpa.dupe(u8, v))` —— `append` OOM 时 dupe 出来的字符串**永远不会被释放**(所有权没转移成功,也没人 free)。正确写法是先 dupe 到局部变量 + `errdefer gpa.free(...)`,再 append。
   - 一个值有多个 dupe 结果时,**每一个都要有自己的 errdefer**。`strToStrVtable.set` 曾经只给 `key` 写了 `errdefer`,`val` 漏了,于是 `map.put` OOM 时泄漏 `val`。

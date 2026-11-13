@@ -17,7 +17,7 @@ licensed under the BSD 3-Clause License that covers this project.
 # Clone and verify
 git clone https://github.com/rebornwwp/zig-pflag.git
 cd zig-pflag
-zig build test          # Run all 210 tests
+zig build test          # Run all 214 tests
 zig fmt --check src/ examples/ build.zig   # CI formatting scope
 
 # Format code before committing
