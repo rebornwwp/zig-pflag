@@ -142,3 +142,116 @@ test "StringToStringVar supports CSV format" {
     try std.testing.expectEqualStrings("2", map.get("b").?);
     try std.testing.expectEqualStrings("3", map.get("c").?);
 }
+
+test "stringVarOwned managed lifecycle" {
+    const TestCase = struct {
+        input: []const []const u8,
+        expected: []const u8,
+    };
+
+    const testCases = [_]TestCase{
+        .{ .input = &.{}, .expected = "world" }, // default is duped, kept alive
+        .{ .input = &.{"--name=Alice"}, .expected = "Alice" },
+        .{ .input = &.{ "-n", "Bob" }, .expected = "Bob" },
+        .{ .input = &.{ "--name=", "--name=Dup" }, .expected = "Dup" }, // replace frees old
+    };
+
+    for (testCases) |tc| {
+        // Args are parsed from individually-owned buffers that get poisoned
+        // right after parse: if the bound value were borrowed (legacy-style)
+        // the assertion below would read 0xAA garbage instead of `expected`.
+        var argv: std.ArrayListUnmanaged([]const u8) = .empty;
+        defer argv.deinit(std.testing.allocator);
+        var owned: std.ArrayListUnmanaged([]u8) = .empty;
+        defer {
+            for (owned.items) |b| std.testing.allocator.free(b);
+            owned.deinit(std.testing.allocator);
+        }
+        for (tc.input) |arg| {
+            const b = try std.testing.allocator.dupe(u8, arg);
+            try owned.append(std.testing.allocator, b);
+            try argv.append(std.testing.allocator, b);
+        }
+
+        var name: []const u8 = "sentinel-not-the-default";
+        var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+        defer fs.deinit();
+        try fs.stringVarOwnedP(&name, "name", "n", "world", "name to greet");
+        try std.testing.expectEqualStrings("world", name); // registration dupes the default
+        try fs.parse(argv.items);
+        for (owned.items) |b| @memset(b, 0xAA);
+        try std.testing.expectEqualStrings(tc.expected, name);
+        // fs.deinit + testing.allocator leak-check verify the state shell,
+        // the duped default and every duped set() value are all freed.
+    }
+}
+
+test "stringVarOwned coexists with explicit state and legacy stringVar" {
+    var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+    defer fs.deinit();
+
+    var owned_val: []const u8 = "";
+    var state_val: []const u8 = "";
+    var legacy_val: []const u8 = "";
+    var state = pflag.StringState{ .value = &state_val, .gpa = std.testing.allocator };
+    try fs.stringStateVar(&state, "explicit", "d1", "caller-owned state");
+    try fs.stringVar(&legacy_val, "legacy", "d2", "borrow-style");
+    try fs.stringVarOwned(&owned_val, "managed", "d3", "FlagSet-owned state");
+
+    try fs.parse(&.{ "--explicit=e1", "--legacy=l1", "--managed=m1" });
+    try std.testing.expectEqualStrings("e1", state_val);
+    try std.testing.expectEqualStrings("l1", legacy_val); // points into the literals above
+    try std.testing.expectEqualStrings("m1", owned_val);
+    // deinit frees explicit's + managed's dupes; managed's state shell dies
+    // via managed_states, explicit's stays caller-owned. Leak checker decides.
+}
+
+test "stringVarOwned registration errors leave no trace" {
+    const ErrCase = struct {
+        name: []const u8,
+        shorthand: []const u8,
+        expected_err: anyerror,
+    };
+
+    // Each case attempts to collide with the seed flag "n"/"z" registered
+    // below. The failure lands inside stringStateVarP AFTER the default has
+    // already been duped — so every rejection exercises the full errdefer
+    // chain: registry pop, dupe free, *p restore.
+    const errCases = [_]ErrCase{
+        .{ .name = "n", .shorthand = "", .expected_err = error.FlagRedefined },
+        .{ .name = "t", .shorthand = "ab", .expected_err = error.ShorthandTooLong },
+        .{ .name = "u", .shorthand = "z", .expected_err = error.ShorthandRedefined },
+    };
+
+    for (errCases) |ec| {
+        var fs = pflag.FlagSet.init(std.testing.allocator, "test");
+        defer fs.deinit();
+        var seed: []const u8 = "";
+        try fs.stringVarOwnedP(&seed, "n", "z", "first", "");
+
+        var dup: []const u8 = "orig";
+        try std.testing.expectError(ec.expected_err, fs.stringVarOwnedP(&dup, ec.name, ec.shorthand, "v", ""));
+        try std.testing.expectEqualStrings("orig", dup); // binding restored
+        try std.testing.expectEqual(@as(usize, 1), fs.formal.count()); // nothing leaked into the set
+        // deinit + leak checker prove the failed registration left no state
+        // behind in managed_states (fs.destroy on a popped/dangling entry would
+        // double-free or UAF here).
+    }
+}
+
+fn ownedRegistrationImpl(gpa: std.mem.Allocator) !void {
+    var name: []const u8 = "default";
+    var host: []const u8 = "";
+    var fs = pflag.FlagSet.init(gpa, "test");
+    defer fs.deinit();
+    // Mandatory: injected OOM during parse would otherwise hit
+    // .exit_on_error and kill the test process with exit(2).
+    fs.error_handling = .continue_on_error;
+    try fs.stringVarOwned(&name, "name", "default", "an owned string");
+    try fs.stringVarOwnedP(&host, "host", "H", "", "empty-string default");
+    try fs.parse(&.{ "--name=oom-test", "-H", "localhost" });
+}
+
+test "stringVarOwned allocation failures" {
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, ownedRegistrationImpl, .{});
+}

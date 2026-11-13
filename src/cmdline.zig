@@ -48,6 +48,19 @@ pub fn stringCL(p: *[]const u8, name: []const u8, value: []const u8, usage: []co
     const cl = getCommandLine(std.heap.page_allocator);
     try cl.stringVar(p, name, value, usage);
 }
+/// Global-set shorthand for `FlagSet.stringVarOwned` — managed semantics:
+/// the global set allocates the state, dupes every value, and
+/// `deinitCommandLine()` frees the lot (no caller-side lifetime chores,
+/// unlike the legacy borrow-style `stringCL` above).
+pub fn stringCLOwned(p: *[]const u8, name: []const u8, value: []const u8, usage: []const u8) !void {
+    const cl = getCommandLine(std.heap.page_allocator);
+    try cl.stringVarOwned(p, name, value, usage);
+}
+/// `stringCLOwned` plus shorthand.
+pub fn stringCLOwnedP(p: *[]const u8, name: []const u8, shorthand: []const u8, value: []const u8, usage: []const u8) !void {
+    const cl = getCommandLine(std.heap.page_allocator);
+    try cl.stringVarOwnedP(p, name, shorthand, value, usage);
+}
 /// Parse against the global set (pass `argv[1..]`); Go's `pflag.Parse()`.
 pub fn parseCL(arguments: []const []const u8) !void {
     const cl = getCommandLine(std.heap.page_allocator);

@@ -145,6 +145,22 @@ pub const Flag = struct {
 
 // ─── FlagSet ───
 
+/// Entry in `FlagSet.managed_states`: a state object this set allocated on the
+/// caller's behalf (owned registration methods; phase 1: strings only).
+const ManagedState = struct {
+    ptr: *anyopaque,
+    destroy: *const fn (state: *anyopaque, gpa: std.mem.Allocator) void,
+};
+
+fn destroyStringState(ptr: *anyopaque, gpa: std.mem.Allocator) void {
+    const state: *StringState = @ptrCast(@alignCast(ptr));
+    gpa.destroy(state);
+    // Shell only — the duped string inside was already freed by the flag's
+    // vtable deinit (FlagSet.deinit destroys managed states strictly AFTER
+    // all flags). NEVER add a `deinit` method to StringState: Allocator
+    // .destroy auto-invokes it and the internals would be freed twice.
+}
+
 /// A named collection of flags: registration, parsing, and query — the
 /// port's equivalent of Go's `pflag.FlagSet`. Allocate with `init(gpa, name)`
 /// and release with `deinit()`; nothing is global, all memory comes from `gpa`.
@@ -166,6 +182,9 @@ pub const FlagSet = struct {
     ordered_formal: std.ArrayListUnmanaged(*Flag) = .empty,
     /// Shorthand character -> flag index for `-x` parsing.
     shorthands: std.AutoHashMapUnmanaged(u8, *Flag) = .empty,
+    /// State objects allocated + owned by this set (via `stringVarOwned*`).
+    /// Destroyed after every flag's vtable deinit ran — see `deinit`.
+    managed_states: std.ArrayListUnmanaged(ManagedState) = .empty,
     /// Flags actually set so far ("actual" = observed), keyed by name...
     actual: std.StringHashMapUnmanaged(*Flag) = .empty,
     /// ...and in first-seen order (visit / nFlag backing).
@@ -212,6 +231,11 @@ pub const FlagSet = struct {
         self.actual.deinit(gpa);
         self.ordered_actual.deinit(gpa);
         self.args.deinit(gpa);
+        // Managed state shells must die AFTER all flag vtable deinits above
+        // (they dereference the state) and this loop must precede the
+        // container's own deinit. Order is load-bearing.
+        for (self.managed_states.items) |ms| ms.destroy(ms.ptr, gpa);
+        self.managed_states.deinit(gpa);
     }
 
     fn normalizeFlagName(self: *FlagSet, name: []const u8) []const u8 {
@@ -247,6 +271,13 @@ pub const FlagSet = struct {
     /// that already exist. Flags are rebuilt (same `Value`, so both sets
     /// still write to the SAME user variables); no_opt_def_val, deprecation
     /// messages, hidden and annotations carry over.
+    ///
+    /// Ownership caveat: flags registered via the owned API
+    /// (`stringVarOwned*`) must NOT be shared — the source set allocates and
+    /// destroys their state, so deinit'ing the source first dangles the
+    /// target's copy. Likewise sharing ANY allocating State (e.g. an explicit
+    /// `StringState`) across two sets double-frees its internals on the pair
+    /// of `deinit()` calls; deep-copy the state if you need both sets to own it.
     pub fn addFlagSet(self: *FlagSet, new_set: *FlagSet) !void {
         for (new_set.ordered_formal.items) |flag| {
             if (self.lookup(flag.name) == null) {
@@ -347,6 +378,39 @@ pub const FlagSet = struct {
         state.value.* = try state.gpa.dupe(u8, value);
         state.allocated = true;
         _ = try self.varP(stringStateValue(state), name, shorthand, usage);
+    }
+
+    /// FlagSet-managed string flag: the set itself allocates the backing
+    /// `StringState`, duplicates the default and every `set()` value via its
+    /// own gpa, and frees everything at `deinit()`. Callers bind a plain
+    /// `*[]const u8` — no *State plumbing, no stored allocator, no manual
+    /// teardown in config structs. Prefer this over the legacy `stringVar`
+    /// for new code; keep `stringStateVar` when you need to observe or reuse
+    /// the state. Registered flags must NOT be shared via `addFlagSet`
+    /// (this set owns the state).
+    pub fn stringVarOwned(self: *FlagSet, p: *[]const u8, name: []const u8, value: []const u8, usage: []const u8) !void {
+        try self.stringVarOwnedP(p, name, "", value, usage);
+    }
+    /// `stringVarOwned` plus shorthand. Error paths (default dupe OOM,
+    /// `FlagRedefined`, `ShorthandTooLong`, `ShorthandRedefined`, registry
+    /// OOM) leave the FlagSet and `*p` exactly as they were before the call.
+    pub fn stringVarOwnedP(self: *FlagSet, p: *[]const u8, name: []const u8, shorthand: []const u8, value: []const u8, usage: []const u8) !void {
+        const gpa = self.gpa;
+        const state = try gpa.create(StringState);
+        errdefer gpa.destroy(state);
+        state.* = .{ .value = p, .gpa = gpa };
+        const old = p.*; // stringStateVarP overwrites p with the duped default
+        // Register ownership BEFORE the flag: if append fails only the fresh
+        // state needs destroying, and if the flag registration fails later
+        // the pop errdefer below keeps the registry (and thus deinit) from
+        // touching a state no flag references anymore.
+        try self.managed_states.append(gpa, .{ .ptr = state, .destroy = destroyStringState });
+        errdefer {
+            self.managed_states.shrinkRetainingCapacity(self.managed_states.items.len - 1);
+            if (state.allocated) gpa.free(state.value.*); // varP failed after the default dupe
+            p.* = old;
+        }
+        try self.stringStateVarP(state, name, shorthand, value, usage);
     }
 
     /// Occurrence counter (Go's count flag): each bare appearance adds +1,
@@ -773,6 +837,8 @@ pub const deinitCommandLine = cmdline.deinitCommandLine;
 pub const boolCL = cmdline.boolCL;
 pub const intCL = cmdline.intCL;
 pub const stringCL = cmdline.stringCL;
+pub const stringCLOwned = cmdline.stringCLOwned;
+pub const stringCLOwnedP = cmdline.stringCLOwnedP;
 pub const parseCL = cmdline.parseCL;
 pub const argsCL = cmdline.argsCL;
 pub const nArgCL = cmdline.nArgCL;
